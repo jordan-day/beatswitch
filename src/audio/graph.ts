@@ -1,10 +1,62 @@
 import * as Tone from 'tone';
 import { bassNote, degreeNote, slotNotes } from '../music/chords';
 import { chordHits, slotLength } from '../music/patterns';
-import { DRUM_ROWS, MELODY_ROWS, STEPS_PER_BAR, type ChordSlot, type DrumRow, type FxSettings, type Project } from '../state/types';
+import {
+  DRUM_ROWS,
+  MELODY_ROWS,
+  SAMPLED_INSTRUMENTS,
+  STEPS_PER_BAR,
+  type ChordSlot,
+  type DrumRow,
+  type FxSettings,
+  type KeysSound,
+  type MelodySound,
+  type Project,
+  type SampledInstrument,
+} from '../state/types';
+import { getInstrument, getKitBuffer, kitSamplePath, loadBuiltins } from './builtinSamples';
 
 const toDb = (v: number) => (v <= 0.001 ? -Infinity : Tone.gainToDb(v));
-import { makeBass, makeCrackleBuffer, makeKeys, makeSampleDrum, makeSynthDrum, type DrumVoice, type KeysVoice } from './instruments';
+
+/** Level of each recorded kit drum, so the acoustic kit sits at about the same loudness as the synth kits. */
+const KIT_GAIN: Record<DrumRow, number> = { kick: 1, snare: 0.75, hat: 0.45, openhat: 0.4, perc: 0.6 };
+
+const isSampled = (s: KeysSound | MelodySound): s is SampledInstrument =>
+  (SAMPLED_INSTRUMENTS as readonly string[]).includes(s);
+
+/** Identity of the voice a sound needs right now; changes once a recorded instrument finishes loading. */
+const voiceKey = (s: KeysSound | MelodySound) => (isSampled(s) && !getInstrument(s) ? 'loading:' + s : s);
+
+/** A recorded instrument when its notes are loaded; until then a similar synth stands in. */
+function makeVoice(s: KeysSound | MelodySound): { voice: KeysVoice; key: string } {
+  if (!isSampled(s)) return { voice: makeKeys(s), key: s };
+  const notes = getInstrument(s);
+  if (notes) return { voice: makeSampledKeys(s, notes), key: s };
+  return { voice: makeKeys(s === 'piano' || s === 'vibes' ? 'rhodes' : s === 'ocarina' ? 'flute' : 'musicbox'), key: 'loading:' + s };
+}
+import {
+  makeBass,
+  makeCrackleBuffer,
+  makeKeys,
+  makeSampledKeys,
+  makeSampleDrum,
+  makeSynthDrum,
+  type DrumVoice,
+  type KeysVoice,
+} from './instruments';
+
+/** Load every recorded sound a project uses (kit drums + instruments). Resolves when ready. */
+export function loadProjectBuiltins(p: Project): Promise<void> {
+  const kit = DRUM_ROWS.flatMap((r) => {
+    const s = p.drums[r].sound;
+    const path = s.kind === 'synth' ? kitSamplePath(r, s.id) : null;
+    return path ? [path] : [];
+  });
+  const inst = [p.chords.sound, p.melody.sound].filter((s): s is SampledInstrument =>
+    (SAMPLED_INSTRUMENTS as readonly string[]).includes(s),
+  );
+  return loadBuiltins(kit, inst);
+}
 
 export type BufferLookup = (id: string) => AudioBuffer | undefined;
 
@@ -78,13 +130,21 @@ export class Graph {
   apply(p: Project) {
     for (const row of DRUM_ROWS) {
       const t = p.drums[row];
+      // built-in recorded kit sounds (or null for the synthesized kits)
+      const kitPath = t.sound.kind === 'synth' ? kitSamplePath(row, t.sound.id) : null;
+      const kitBuf = kitPath ? getKitBuffer(kitPath) : undefined;
       const buf = t.sound.kind === 'user' ? this.getBuffer(t.sound.id) : undefined;
       const key =
-        t.sound.kind === 'synth' ? 'synth:' + t.sound.id : buf ? 'user:' + t.sound.id : 'missing:' + t.sound.id;
+        t.sound.kind === 'user'
+          ? (buf ? 'user:' : 'missing:') + t.sound.id
+          : kitPath
+            ? (kitBuf ? 'kit:' : 'kit-loading:') + kitPath
+            : 'synth:' + t.sound.id;
       const cur = this.drums[row];
       if (!cur || cur.key !== key) {
         let v: DrumVoice;
-        if (t.sound.kind === 'synth') v = makeSynthDrum(row, t.sound.id);
+        if (kitBuf) v = makeSampleDrum(kitBuf, KIT_GAIN[row]);
+        else if (t.sound.kind === 'synth') v = makeSynthDrum(row, kitPath ? 'dusty' : t.sound.id); // synth stands in while a kit loads
         else if (buf) v = makeSampleDrum(buf);
         else {
           v = makeSynthDrum(row, 'dusty');
@@ -100,19 +160,17 @@ export class Graph {
       d.vol.mute = t.mute;
     }
 
-    if (!this.keys || this.keys.key !== p.chords.sound) {
+    if (!this.keys || this.keys.key !== voiceKey(p.chords.sound)) {
       this.keys?.voice.dispose();
-      const voice = makeKeys(p.chords.sound);
-      voice.output.connect(this.keysVol);
-      this.keys = { voice, key: p.chords.sound };
+      this.keys = makeVoice(p.chords.sound);
+      this.keys.voice.output.connect(this.keysVol);
     }
     this.keysVol.volume.value = toDb(p.chords.volume);
 
-    if (!this.melody || this.melody.key !== p.melody.sound) {
+    if (!this.melody || this.melody.key !== voiceKey(p.melody.sound)) {
       this.melody?.voice.dispose();
-      const voice = makeKeys(p.melody.sound);
-      voice.output.connect(this.melodyVol);
-      this.melody = { voice, key: p.melody.sound };
+      this.melody = makeVoice(p.melody.sound);
+      this.melody.voice.output.connect(this.melodyVol);
     }
     // +5 dB: a single melody line needs to sit on top of the (multi-note) chords
     this.melodyVol.volume.value = p.melody.mute ? -Infinity : toDb(p.melody.volume) + 5;

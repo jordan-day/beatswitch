@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ensureAudio } from '../audio/engine';
 import { useProject, useUi } from '../state/project';
-import { DRUM_ROWS, STEPS_PER_BAR, SYNTH_KITS, type DrumRow } from '../state/types';
+import { DRUM_ROWS, STEPS_PER_BAR, SYNTH_KITS, type DrumRow, type SynthKit } from '../state/types';
 import { useSamples } from './common';
 import { EditorHeader } from './EditorHeader';
 
@@ -23,7 +23,15 @@ const ROW_INFO: Record<RowId, { label: string; hint: string; color: string; bg: 
   chords: { label: 'Chords', hint: 'When the chords play. Each hit rings until the next one.', color: '#8fb3e5', bg: 'bg-chord' },
 };
 
-const KIT_LABEL: Record<string, string> = { dusty: 'Dusty kit', soft: 'Soft kit' };
+// 🎙 = recorded sound (VCSL, public domain); the others are synthesized.
+const KIT_LABEL: Record<SynthKit, string> = {
+  acoustic: '🎙 Acoustic kit',
+  dusty: 'Dusty kit',
+  soft: 'Soft kit',
+  clap: '🎙 Clap',
+  shaker: '🎙 Shaker',
+  tambourine: '🎙 Tambourine',
+};
 
 export function DrumGrid() {
   const project = useProject((s) => s.project);
@@ -207,7 +215,7 @@ function RowSettings({ row, onPickFile }: { row: DrumRow; onPickFile: (f: File) 
           if (v === 'import') return fileRef.current?.click();
           const [kind, id] = v.split(':');
           update((p) => {
-            if (kind === 'synth') p.drums[row].sound = { kind: 'synth', id: id as (typeof SYNTH_KITS)[number] };
+            if (kind === 'synth') p.drums[row].sound = { kind: 'synth', id: id as SynthKit };
             else {
               const meta = samples.find((s) => s.id === id);
               p.drums[row].sound = { kind: 'user', id, name: meta?.name ?? 'Sample' };

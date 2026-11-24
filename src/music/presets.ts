@@ -1,4 +1,4 @@
-import type { BassStep, MelodyNote, Mood, Project } from '../state/types';
+import type { BassStep, MelodyNote, Mood, Project, SynthKit } from '../state/types';
 import { MAX_STEPS } from '../state/types';
 import { PROGRESSIONS, progressionChords } from './chords';
 import { lofiMacro, parsePattern, rhythmToSteps } from './patterns';
@@ -24,13 +24,14 @@ interface PresetDef {
   /** [start step, length, scale degree] */
   melody?: [number, number, number][];
   melodySound?: Project['melody']['sound'];
+  kit?: SynthKit;
 }
 
 const PRESETS: PresetDef[] = [
   {
     name: 'Rainy Window',
-    blurb: 'Sad & slow, tape hiss, with a melody',
-    bpm: 72, swing: 40, tonic: 'A', mood: 'sad', progression: 0, keys: 'rhodes', rhythm: 'whole', lofi: 0.6,
+    blurb: 'Sad & slow: real piano, drums and kalimba',
+    bpm: 72, swing: 40, tonic: 'A', mood: 'sad', progression: 0, keys: 'piano', rhythm: 'whole', lofi: 0.6, kit: 'acoustic',
     kick:    'X.........x.....',
     snare:   '....X.......X...',
     hat:     'x.x.x.x.x.xxx.x.',
@@ -43,7 +44,7 @@ const PRESETS: PresetDef[] = [
       [34, 2, 8], [36, 2, 6], [38, 6, 5],
       [50, 2, 6], [52, 2, 4], [54, 8, 2],
     ],
-    melodySound: 'musicbox',
+    melodySound: 'kalimba',
   },
   {
     name: 'Late Night Study',
@@ -58,7 +59,7 @@ const PRESETS: PresetDef[] = [
   },
   {
     name: 'Sunday Coffee',
-    blurb: 'Jazzy chords, bouncy, flute melody',
+    blurb: 'Jazzy chords, bouncy, ocarina melody',
     bpm: 88, swing: 50, tonic: 'Eb', mood: 'jazzy', progression: 0, keys: 'rhodes', rhythm: 'stab', lofi: 0.35,
     kick:    'X.....x...x..x..',
     snare:   '....X.......X..x',
@@ -72,12 +73,12 @@ const PRESETS: PresetDef[] = [
       [32, 2, 3], [35, 2, 5], [38, 4, 7],
       [48, 2, 6], [51, 2, 4], [54, 6, 1],
     ],
-    melodySound: 'flute',
+    melodySound: 'ocarina',
   },
   {
     name: 'Dream Sequence',
-    blurb: 'Floaty pads, lots of space',
-    bpm: 68, swing: 25, tonic: 'D', mood: 'dreamy', progression: 1, keys: 'pad', rhythm: 'whole', lofi: 0.7,
+    blurb: 'Floaty vibraphone, lots of space',
+    bpm: 68, swing: 25, tonic: 'D', mood: 'dreamy', progression: 1, keys: 'vibes', rhythm: 'whole', lofi: 0.7,
     kick:    'X.......X.......',
     snare:   '....X.......X...',
     hat:     '..x...x...x...x.',
@@ -98,7 +99,7 @@ export function parseBass(s: string): BassStep[] {
 
 export function buildPreset(index: number): Project {
   const p = PRESETS[index] ?? PRESETS[0];
-  const synth = { kind: 'synth' as const, id: 'dusty' as const };
+  const synth = { kind: 'synth' as const, id: p.kit ?? ('dusty' as const) };
   const melody: MelodyNote[] = (p.melody ?? []).map(([s, l, d]) => ({ s, l, d }));
   return {
     version: 1,

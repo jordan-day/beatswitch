@@ -3,10 +3,10 @@ import { useProject, useUi } from '../state/project';
 import {
   BASS_SOUNDS,
   DRUM_ROWS,
+  FULL_KITS,
   KEYS_SOUNDS,
   MELODY_SOUNDS,
   MOODS,
-  SYNTH_KITS,
   type BassSound,
   type ChordRhythm,
   type KeysSound,
@@ -16,15 +16,28 @@ import {
 import { Slider } from './common';
 import { LofiPanel } from './LofiPanel';
 
-export const KEYS_LABEL: Record<KeysSound, string> = { rhodes: '🎹 Electric piano', pad: '☁️ Soft pad', musicbox: '🎐 Music box' };
+// "🎙" marks recorded (real) instruments; the rest are synthesized.
+export const KEYS_LABEL: Record<KeysSound, string> = {
+  rhodes: '🎹 Electric piano',
+  piano: '🎙 Upright piano',
+  vibes: '🎙 Vibraphone',
+  kalimba: '🎙 Kalimba',
+  pad: '☁️ Soft pad',
+  musicbox: '🎐 Music box',
+};
 const MELODY_LABEL: Record<MelodySound, string> = {
   musicbox: '🎐 Music box',
+  kalimba: '🎙 Kalimba',
+  glock: '🎙 Glockenspiel',
+  vibes: '🎙 Vibraphone',
+  piano: '🎙 Upright piano',
+  ocarina: '🎙 Ocarina',
   rhodes: '🎹 Electric piano',
   flute: '🪈 Soft flute',
   lead: '📻 Retro lead',
 };
 const BASS_LABEL: Record<BassSound, string> = { round: 'Round', sub: 'Deep sub', pluck: 'Plucky' };
-const KIT_LABEL: Record<SynthKit, string> = { dusty: 'Dusty', soft: 'Soft' };
+const KIT_LABEL: Record<(typeof FULL_KITS)[number], string> = { acoustic: '🎙 Acoustic', dusty: 'Dusty (synth)', soft: 'Soft (synth)' };
 const RHYTHM_LABEL: Record<ChordRhythm, { label: string; hint: string }> = {
   whole: { label: 'Long', hint: 'Each chord rings out' },
   half: { label: 'Twice', hint: 'Each chord plays two times' },
@@ -80,7 +93,12 @@ export function Inspector() {
             <span className="text-sm font-bold">Drum kit</span>
             <select
               className="select"
-              value={DRUM_ROWS.every((r) => p.drums[r].sound.kind === 'synth' && p.drums[r].sound.id === p.drums.kick.sound.id) ? p.drums.kick.sound.id : ''}
+              value={
+                DRUM_ROWS.every((r) => p.drums[r].sound.kind === 'synth' && p.drums[r].sound.id === p.drums.kick.sound.id) &&
+                (FULL_KITS as readonly string[]).includes(p.drums.kick.sound.id)
+                  ? p.drums.kick.sound.id
+                  : ''
+              }
               onChange={(e) =>
                 update((d) => {
                   // only swaps built-in rows; imported samples stay put
@@ -92,7 +110,7 @@ export function Inspector() {
               <option value="" disabled>
                 Mixed
               </option>
-              {SYNTH_KITS.map((k) => (
+              {FULL_KITS.map((k) => (
                 <option key={k} value={k}>
                   {KIT_LABEL[k]}
                 </option>

@@ -4,17 +4,27 @@ export type DrumRow = (typeof DRUM_ROWS)[number];
 export const MOODS = ['chill', 'dreamy', 'sad', 'jazzy'] as const;
 export type Mood = (typeof MOODS)[number];
 
-export const KEYS_SOUNDS = ['rhodes', 'pad', 'musicbox'] as const;
+/** Sampled (recorded) instruments, from VCSL (CC0); see public/samples. */
+export const SAMPLED_INSTRUMENTS = ['piano', 'vibes', 'kalimba', 'glock', 'ocarina'] as const;
+export type SampledInstrument = (typeof SAMPLED_INSTRUMENTS)[number];
+
+export const KEYS_SOUNDS = ['rhodes', 'piano', 'vibes', 'kalimba', 'pad', 'musicbox'] as const;
 export type KeysSound = (typeof KEYS_SOUNDS)[number];
 
-export const MELODY_SOUNDS = ['musicbox', 'rhodes', 'flute', 'lead'] as const;
+export const MELODY_SOUNDS = ['musicbox', 'kalimba', 'glock', 'vibes', 'piano', 'ocarina', 'rhodes', 'flute', 'lead'] as const;
 export type MelodySound = (typeof MELODY_SOUNDS)[number];
 
 export const BASS_SOUNDS = ['round', 'sub', 'pluck'] as const;
 export type BassSound = (typeof BASS_SOUNDS)[number];
 
-export const SYNTH_KITS = ['dusty', 'soft'] as const;
+/**
+ * Built-in drum sounds. 'dusty' and 'soft' are synthesized; 'acoustic' is a recorded kit
+ * (each row gets its own drum); 'clap', 'shaker' and 'tambourine' are recorded one-shots for any row.
+ */
+export const SYNTH_KITS = ['dusty', 'soft', 'acoustic', 'clap', 'shaker', 'tambourine'] as const;
 export type SynthKit = (typeof SYNTH_KITS)[number];
+/** The full kits (one sound per row), offered in the "Drum kit" switch. */
+export const FULL_KITS = ['acoustic', 'dusty', 'soft'] as const;
 
 export type ChordRhythm = 'whole' | 'half' | 'stab' | 'custom';
 

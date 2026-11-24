@@ -1,7 +1,7 @@
 import * as Tone from 'tone';
 import { DRUM_ROWS, STEPS_PER_BAR, type Project } from '../state/types';
 import { getCachedBuffer, loadSample } from '../storage/samples';
-import { Graph, stepSeconds, toToneSwing } from './graph';
+import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
 import { encodeWav } from './wav';
 import { zipSingleFile } from './zip';
 import { safeName } from '../platform';
@@ -14,6 +14,7 @@ export function exportDuration(p: Project, loops: number) {
 
 /** Render `loops` repeats of the beat offline (faster than real time) and return a WAV blob. */
 export async function renderWav(p: Project, loops = 4): Promise<Blob> {
+  await loadProjectBuiltins(p);
   await Promise.all(
     DRUM_ROWS.map((r) => p.drums[r].sound).flatMap((s) => (s.kind === 'user' ? [loadSample(s.id)] : [])),
   );

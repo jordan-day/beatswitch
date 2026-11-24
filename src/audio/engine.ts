@@ -2,7 +2,7 @@ import * as Tone from 'tone';
 import { useProject, useUi } from '../state/project';
 import { DRUM_ROWS, STEPS_PER_BAR, type ChordSlot, type Project } from '../state/types';
 import { getCachedBuffer, loadSample } from '../storage/samples';
-import { Graph, toToneSwing } from './graph';
+import { Graph, loadProjectBuiltins, toToneSwing } from './graph';
 
 /**
  * Live playback. The UI only edits the store; the engine subscribes and keeps the
@@ -20,8 +20,9 @@ function syncTransport(p: Project) {
   t.swingSubdivision = '16n';
 }
 
-/** Load any imported samples this project uses, then re-apply so they replace the fallback. */
+/** Load any recorded or imported sounds this project uses, then re-apply so they replace the stand-ins. */
 function ensureSamples(p: Project) {
+  loadProjectBuiltins(p).then(() => graph?.apply(useProject.getState().project));
   for (const r of DRUM_ROWS) {
     const s = p.drums[r].sound;
     if (s.kind === 'user' && !getCachedBuffer(s.id)) {

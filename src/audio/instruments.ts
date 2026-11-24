@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import type { BassSound, DrumRow, KeysSound, MelodySound, SynthKit } from '../state/types';
+import type { BassSound, DrumRow, KeysSound, MelodySound, SampledInstrument, SynthKit } from '../state/types';
 
 export interface DrumVoice {
   output: Tone.ToneAudioNode;
@@ -89,16 +89,18 @@ export function makeSynthDrum(row: DrumRow, kit: SynthKit): DrumVoice {
   }
 }
 
-export function makeSampleDrum(buffer: AudioBuffer): DrumVoice {
-  const out = new Tone.Gain(1);
+export function makeSampleDrum(buffer: AudioBuffer, gain = 1): DrumVoice {
+  const out = new Tone.Gain(gain);
   const toneBuf = new Tone.ToneAudioBuffer(buffer);
   const sources = new Set<Tone.ToneBufferSource>();
   return {
     output: out,
     trigger: (time, vel) => {
-      // A fresh source per hit, so hits can overlap and retrigger cleanly.
-      const src = new Tone.ToneBufferSource(toneBuf);
-      const g = new Tone.Gain(vel).connect(out);
+      // A fresh source per hit, so hits can overlap and retrigger cleanly. Created in this voice's
+      // own audio context: during a WAV export, hits fire while Tone's global context is the live one.
+      const context = out.context;
+      const src = new Tone.ToneBufferSource({ url: toneBuf, context });
+      const g = new Tone.Gain({ gain: vel, context }).connect(out);
       src.connect(g);
       src.onended = () => {
         sources.delete(src);
@@ -122,7 +124,33 @@ export interface KeysVoice {
   dispose(): void;
 }
 
-export function makeKeys(sound: KeysSound | MelodySound): KeysVoice {
+/**
+ * Per-instrument feel for the recorded (sampled) instruments. Volumes were set by rendering each one
+ * through the full chain and matching its loudness (RMS) to the synth keys and music box.
+ */
+const SAMPLER_SETTINGS: Record<SampledInstrument, { attack: number; release: number; volume: number }> = {
+  piano: { attack: 0, release: 1.0, volume: -12 },
+  vibes: { attack: 0, release: 1.4, volume: -19 },
+  kalimba: { attack: 0, release: 0.9, volume: -6.5 },
+  glock: { attack: 0, release: 1.4, volume: -9.5 },
+  ocarina: { attack: 0.03, release: 0.25, volume: -17 },
+};
+
+/** A recorded instrument: a few real notes, with the notes in between pitched from the nearest one. */
+export function makeSampledKeys(name: SampledInstrument, notes: Record<string, AudioBuffer>): KeysVoice {
+  const s = SAMPLER_SETTINGS[name];
+  const sampler = new Tone.Sampler({ urls: notes, attack: s.attack, release: s.release, volume: s.volume });
+  return {
+    output: sampler,
+    play: (n, dur, time, vel = 0.8) => {
+      if (n.length) sampler.triggerAttackRelease(n, dur, time, vel);
+    },
+    releaseAll: () => sampler.releaseAll(),
+    dispose: () => sampler.dispose(),
+  };
+}
+
+export function makeKeys(sound: Exclude<KeysSound | MelodySound, SampledInstrument>): KeysVoice {
   let synth: Tone.PolySynth;
   if (sound === 'flute') {
     synth = new Tone.PolySynth(Tone.Synth, {

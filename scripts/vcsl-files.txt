@@ -1,0 +1,37 @@
+# set|output name|path in https://github.com/sgossner/VCSL (CC0 1.0)
+kit|kick|Membranophones/Struck Membranophones/Bass Drum 1/BDrumNew_hit_v3_rr1_Sum.wav
+kit|snare|Membranophones/Struck Membranophones/Snare Drum, Modern 1/Snare2_HitSN_v5_rr1_Mid.wav
+kit|hat|Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitC_v2_rr1_Mid.wav
+kit|openhat|Idiophones/Struck Idiophones/Hi-Hat Cymbal/HiHat_HitO_rr1_Mid.wav
+kit|clap|Idiophones/Struck Idiophones/Claps/Clap_rr1.wav
+kit|shaker|Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerDouble_Down_rr1.wav
+kit|tambourine|Idiophones/Struck Idiophones/Tambourine 1/Tamb1_Hit_v1_rr1_Mid.wav
+piano|A1|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_A1.wav
+piano|F2|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_F2.wav
+piano|C#3|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_C#3.wav
+piano|A3|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_A3.wav
+piano|F4|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_F4.wav
+piano|C#5|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_C#5.wav
+piano|A5|Chordophones/Zithers/Upright Piano, Knight/Sustains/Player_vl1_rr1_A5.wav
+vibes|F2|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_F2_v1_rr1_Main.wav
+vibes|C3|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_C3_v1_rr2_Main.wav
+vibes|G3|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_G3_v1_rr1_Main.wav
+vibes|D4|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_D4_v1_rr1_Main.wav
+vibes|A4|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_A4_v1_rr1_Main.wav
+vibes|E5|Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_E5_v1_rr1_Main.wav
+kalimba|B2|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_B2_k8_vl3_rr2.wav
+kalimba|D#3|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_D#3_k6_vl3_rr2.wav
+kalimba|G#3|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_G#3_k4_vl3_rr2.wav
+kalimba|C#4|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_C#4_k2_vl3_rr2.wav
+kalimba|F#4|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_F#4_k14_vl3_rr2.wav
+kalimba|B4|Idiophones/Plucked Idiophones/Kalimba, Kenya/Mbira6_Normal_MainSpirit_B4_k15_vl3_rr2.wav
+glock|G4|Idiophones/Struck Idiophones/Glockenspiel/glock_soft_G4_01.wav
+glock|C5|Idiophones/Struck Idiophones/Glockenspiel/glock_soft_C5_02.wav
+glock|G5|Idiophones/Struck Idiophones/Glockenspiel/glock_soft_G5_01.wav
+glock|C6|Idiophones/Struck Idiophones/Glockenspiel/glock_soft_C6_01.wav
+glock|G6|Idiophones/Struck Idiophones/Glockenspiel/glock_soft_G6_01.wav
+ocarina|A3|Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/Sus/StdOcarina_Sus_A3.wav
+ocarina|C#4|Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/Sus/StdOcarina_Sus_C#4.wav
+ocarina|E4|Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/Sus/StdOcarina_Sus_E4.wav
+ocarina|G#4|Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/Sus/StdOcarina_Sus_G#4.wav
+ocarina|C#5|Aerophones/Edge-blown Aerophones/Ocarina, Typical/Sustains/Sus/StdOcarina_Sus_C#5.wav

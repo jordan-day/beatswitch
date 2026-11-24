@@ -1,0 +1,53 @@
+{
+  "source": "VCSL by Versilian Studios (CC0 1.0) https://github.com/sgossner/VCSL",
+  "sets": {
+    "glock": {
+      "C6": "glock/C6.wav",
+      "C7": "glock/C7.wav",
+      "G5": "glock/G5.wav",
+      "G6": "glock/G6.wav",
+      "G7": "glock/G7.wav"
+    },
+    "kalimba": {
+      "B3": "kalimba/B3.wav",
+      "B5": "kalimba/B5.wav",
+      "C#5": "kalimba/Cs5.wav",
+      "D#4": "kalimba/Ds4.wav",
+      "F#5": "kalimba/Fs5.wav",
+      "G#4": "kalimba/Gs4.wav"
+    },
+    "kit": {
+      "clap": "kit/clap.wav",
+      "hat": "kit/hat.wav",
+      "kick": "kit/kick.wav",
+      "openhat": "kit/openhat.wav",
+      "shaker": "kit/shaker.wav",
+      "snare": "kit/snare.wav",
+      "tambourine": "kit/tambourine.wav"
+    },
+    "ocarina": {
+      "A4": "ocarina/A4.wav",
+      "C#5": "ocarina/Cs5.wav",
+      "C#6": "ocarina/Cs6.wav",
+      "E5": "ocarina/E5.wav",
+      "G#5": "ocarina/Gs5.wav"
+    },
+    "piano": {
+      "A2": "piano/A2.wav",
+      "A4": "piano/A4.wav",
+      "A6": "piano/A6.wav",
+      "C#4": "piano/Cs4.wav",
+      "C#6": "piano/Cs6.wav",
+      "F3": "piano/F3.wav",
+      "F5": "piano/F5.wav"
+    },
+    "vibes": {
+      "A5": "vibes/A5.wav",
+      "C4": "vibes/C4.wav",
+      "D5": "vibes/D5.wav",
+      "E6": "vibes/E6.wav",
+      "F3": "vibes/F3.wav",
+      "G4": "vibes/G4.wav"
+    }
+  }
+}

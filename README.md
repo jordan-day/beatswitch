@@ -27,3 +27,12 @@ npm run dev
 Pushing to `main` builds the site and deploys it to GitHub Pages (see `.github/workflows/deploy.yml`).
 
 Built with React, TypeScript, Vite, Tone.js and Tonal.
+
+## Sounds
+
+Recorded instruments (🎙 in the app: acoustic drum kit, clap, shaker, tambourine, upright piano,
+vibraphone, kalimba, glockenspiel and ocarina) come from the
+[Versilian Community Sample Library](https://github.com/sgossner/VCSL) by Versilian Studios,
+released as CC0 (public domain). See [`public/samples/CREDITS.md`](public/samples/CREDITS.md).
+To rebuild them, download the files listed in `scripts/vcsl-files.txt` and run
+`node scripts/process-samples.mjs <raw dir> public/samples`. Everything else is synthesized in the browser.
