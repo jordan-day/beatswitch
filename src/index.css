@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* BeatSwitch is deliberately dark-only (a studio at night), in every host theme. */
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-ink-900 text-cream-100 font-sans antialiased;
+    background-image: radial-gradient(ellipse at top, #2a2230 0%, #1a171e 60%);
+    min-height: 100%;
+  }
+  /* Desktop: a one-screen workspace sized to the page (not 100vh, which ignores a host's safe-area padding). */
+  @media (min-width: 1024px) {
+    html,
+    body,
+    #root {
+      height: 100%;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-ink-800/90 border border-ink-600/60 shadow-lg shadow-black/30 p-4 sm:p-5;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold
+      bg-ink-700 hover:bg-ink-600 active:scale-95 transition disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-kick text-ink-950 hover:brightness-110 hover:bg-kick;
+  }
+  .chip {
+    @apply rounded-full px-3 py-1.5 text-sm font-bold border border-ink-600 bg-ink-700/60 hover:bg-ink-600 transition;
+  }
+  .chip-on {
+    @apply bg-cream-100 text-ink-950 border-cream-100 hover:bg-cream-100;
+  }
+  .select {
+    @apply rounded-lg bg-ink-700 border border-ink-600 px-2 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-kick/60;
+  }
+  /*
+   * Grid squares: hover is an instant outline (no transition), so it keeps up with fast
+   * mouse moves and shows on every square colour: empty, beat-marker, in-chord or filled.
+   */
+  .cell {
+    @apply cursor-pointer;
+    transition: none;
+  }
+  .cell:hover {
+    box-shadow: inset 0 0 0 2px rgba(243, 233, 220, 0.7);
+    filter: brightness(1.15);
+  }
+  .label {
+    @apply text-xs font-bold uppercase tracking-wider text-cream-500;
+  }
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 22px;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #3d3746;
+}
+input[type='range']::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #3d3746;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: var(--thumb, #f3e9dc);
+  border: 3px solid #1a171e;
+  cursor: pointer;
+}
+input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--thumb, #f3e9dc);
+  border: 3px solid #1a171e;
+  cursor: pointer;
+}
+input[type='range'].big::-webkit-slider-runnable-track {
+  height: 12px;
+  background: linear-gradient(90deg, #8fb3e5, #e6c27a 50%, #e8916b);
+}
+input[type='range'].big::-moz-range-track {
+  height: 12px;
+  background: linear-gradient(90deg, #8fb3e5, #e6c27a 50%, #e8916b);
+}
+input[type='range'].big::-webkit-slider-thumb {
+  width: 30px;
+  height: 30px;
+  margin-top: -9px;
+}
+input[type='range'].big::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+}
