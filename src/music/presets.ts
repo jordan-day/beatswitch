@@ -126,6 +126,8 @@ export function buildPreset(index: number): Project {
     },
     bass: { enabled: true, sound: 'round', steps: parseBass(p.bass), volume: 0.7 },
     melody: { sound: p.melodySound ?? 'musicbox', octave: 4, notes: melody, volume: 0.6, mute: false },
+    extraDrums: [],
+    extraMelodies: [],
     fx: { lofi: p.lofi, ...lofiMacro(p.lofi) },
     ...demoSong(),
   };

@@ -69,6 +69,29 @@ export interface DrumTrack {
   mute: boolean;
 }
 
+/** A drum row you added to the pad, on top of the five built-in rows. */
+export interface ExtraDrum extends DrumTrack {
+  id: string;
+  /** Which kind of drum the built-in kits play on this row (e.g. a "snare" from the soft kit). */
+  voice: DrumRow;
+}
+
+export interface MelodyTrack {
+  sound: MelodySound;
+  octave: number; // 3..5, octave of the bottom row
+  notes: MelodyNote[];
+  volume: number;
+  mute: boolean;
+}
+
+/** A melody you added, on top of the first one, with its own instrument. */
+export interface ExtraMelody extends MelodyTrack {
+  id: string;
+}
+
+export const MAX_EXTRA_DRUMS = 4;
+export const MAX_EXTRA_MELODIES = 3;
+
 export interface FxSettings {
   lofi: number; // macro 0..1
   crackle: number; // 0..1
@@ -104,13 +127,11 @@ export interface Project {
     steps: BassStep[];
     volume: number;
   };
-  melody: {
-    sound: MelodySound;
-    octave: number; // 3..5, octave of the bottom row
-    notes: MelodyNote[];
-    volume: number;
-    mute: boolean;
-  };
+  melody: MelodyTrack;
+  /** Drum rows added to the pad. Sound and volume are song-wide; each section has its own hits. */
+  extraDrums: ExtraDrum[];
+  /** More melodies, each with its own instrument. Sound and volume are song-wide; notes are per section. */
+  extraMelodies: ExtraMelody[];
   fx: FxSettings;
 
   // ---- song arrangement (see state/song.ts) ----

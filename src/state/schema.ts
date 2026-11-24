@@ -5,6 +5,8 @@ import {
   BPM_MIN,
   DRUM_ROWS,
   KEYS_SOUNDS,
+  MAX_EXTRA_DRUMS,
+  MAX_EXTRA_MELODIES,
   MAX_STEPS,
   MELODY_ROWS,
   MELODY_SOUNDS,
@@ -12,6 +14,10 @@ import {
   SYNTH_KITS,
   type BassStep,
   type ChordSlot,
+  type ExtraDrum,
+  type ExtraMelody,
+  type MelodyNote,
+  type MelodyTrack,
   type Project,
   type SoundRef,
   type Step,
@@ -54,6 +60,56 @@ function sound(v: unknown): SoundRef {
   return { kind: 'synth', id: isObj(v) ? oneOf(v.id, SYNTH_KITS, 'dusty') : 'dusty' };
 }
 
+/** Melody notes; notes outside the grid are dropped rather than squashed onto its edge. */
+function melodyNotes(v: unknown): MelodyNote[] {
+  const notes = Array.isArray(v) ? v.slice(0, 512) : [];
+  return notes
+    .filter(isObj)
+    .filter((n) => isInt(n.s, 0, MAX_STEPS - 1) && isInt(n.d, 0, MELODY_ROWS - 1))
+    .map((n) => ({ s: n.s as number, d: n.d as number, l: Math.round(num(n.l, 1, MAX_STEPS, 1)) }));
+}
+
+function melodyTrack(m: Record<string, unknown>, base: MelodyTrack): MelodyTrack {
+  return {
+    sound: oneOf(m.sound, MELODY_SOUNDS, base.sound),
+    octave: Math.round(num(m.octave, 3, 5, 4)),
+    notes: melodyNotes(m.notes),
+    volume: num(m.volume, 0, 1, base.volume),
+    mute: m.mute === true,
+  };
+}
+
+const ID_RE = /^[a-z0-9]{1,16}$/i;
+/** Ids of added tracks: never a built-in row name, so they can't be mistaken for one. */
+const trackId = (v: unknown): v is string => typeof v === 'string' && ID_RE.test(v) && !(DRUM_ROWS as readonly string[]).includes(v) && v !== 'main';
+
+function extraDrums(v: unknown): ExtraDrum[] {
+  const out: ExtraDrum[] = [];
+  for (const d of Array.isArray(v) ? v : []) {
+    if (out.length >= MAX_EXTRA_DRUMS) break;
+    if (!isObj(d) || !trackId(d.id) || out.some((x) => x.id === d.id)) continue;
+    out.push({
+      id: d.id,
+      voice: oneOf(d.voice, DRUM_ROWS, 'perc'),
+      sound: sound(d.sound),
+      steps: steps(d.steps, Array.from({ length: MAX_STEPS }, () => 0 as Step)),
+      volume: num(d.volume, 0, 1, 0.6),
+      mute: d.mute === true,
+    });
+  }
+  return out;
+}
+
+function extraMelodies(v: unknown, base: MelodyTrack): ExtraMelody[] {
+  const out: ExtraMelody[] = [];
+  for (const m of Array.isArray(v) ? v : []) {
+    if (out.length >= MAX_EXTRA_MELODIES) break;
+    if (!isObj(m) || !trackId(m.id) || out.some((x) => x.id === m.id)) continue;
+    out.push({ id: m.id, ...melodyTrack(m, base) });
+  }
+  return out;
+}
+
 /**
  * Validate untrusted data (share links, saved files) into a well-formed Project.
  * Returns null when the data is clearly not a BeatSwitch project.
@@ -73,6 +129,8 @@ export function parseProject(data: unknown): Project | null {
     chords: base.chords,
     bass: base.bass,
     melody: base.melody,
+    extraDrums: [],
+    extraMelodies: [],
     fx: base.fx,
     sections: base.sections,
     activeSection: base.activeSection,
@@ -117,21 +175,9 @@ export function parseProject(data: unknown): Project | null {
       volume: num(data.bass.volume, 0, 1, base.bass.volume),
     };
   }
-  if (isObj(data.melody)) {
-    const m = data.melody;
-    const notes = Array.isArray(m.notes) ? m.notes.slice(0, 512) : [];
-    p.melody = {
-      sound: oneOf(m.sound, MELODY_SOUNDS, 'musicbox'),
-      octave: Math.round(num(m.octave, 3, 5, 4)),
-      // notes outside the grid are dropped rather than squashed onto its edge
-      notes: notes
-        .filter(isObj)
-        .filter((n) => isInt(n.s, 0, MAX_STEPS - 1) && isInt(n.d, 0, MELODY_ROWS - 1))
-        .map((n) => ({ s: n.s as number, d: n.d as number, l: Math.round(num(n.l, 1, MAX_STEPS, 1)) })),
-      volume: num(m.volume, 0, 1, base.melody.volume),
-      mute: m.mute === true,
-    };
-  }
+  if (isObj(data.melody)) p.melody = melodyTrack(data.melody, { ...base.melody, sound: 'musicbox' });
+  p.extraDrums = extraDrums(data.extraDrums);
+  p.extraMelodies = extraMelodies(data.extraMelodies, base.melody);
   if (isObj(data.fx)) {
     const f = data.fx;
     p.fx = {
@@ -147,8 +193,6 @@ export function parseProject(data: unknown): Project | null {
   return p;
 }
 
-const ID_RE = /^[a-z0-9]{1,16}$/i;
-
 /** One stored section's patterns, validated by running them through the project parser. */
 function parsePatterns(raw: unknown): SectionPatterns | undefined {
   if (!isObj(raw) || !isObj(raw.drums)) return undefined;
@@ -162,7 +206,18 @@ function parsePatterns(raw: unknown): SectionPatterns | undefined {
     melody: { notes: raw.melody },
   };
   const parsed = parseProject(asProject);
-  return parsed ? extractPatterns(parsed) : undefined;
+  if (!parsed) return undefined;
+  const out = extractPatterns(parsed);
+  // added tracks' hits and notes, by track id (tracks that no longer exist are dropped in parseSong)
+  const xd = isObj(raw.extraDrums) ? raw.extraDrums : {};
+  const xm = isObj(raw.extraMelodies) ? raw.extraMelodies : {};
+  out.extraDrums = Object.fromEntries(
+    Object.entries(xd).filter(([id]) => trackId(id)).slice(0, MAX_EXTRA_DRUMS).map(([id, v]) => [id, steps(v, Array.from({ length: MAX_STEPS }, () => 0 as Step))]),
+  );
+  out.extraMelodies = Object.fromEntries(
+    Object.entries(xm).filter(([id]) => trackId(id)).slice(0, MAX_EXTRA_MELODIES).map(([id, v]) => [id, melodyNotes(v)]),
+  );
+  return out;
 }
 
 /**
@@ -198,6 +253,14 @@ function parseSong(data: Record<string, unknown>, p: Project) {
         fill: b.fill === true,
       };
     });
+  // keep only the added tracks' patterns for tracks the project still has
+  const drumIds = new Set(p.extraDrums.map((d) => d.id));
+  const melodyIds = new Set(p.extraMelodies.map((m) => m.id));
+  for (const s of valid) {
+    if (!s.patterns) continue;
+    s.patterns.extraDrums = Object.fromEntries(Object.entries(s.patterns.extraDrums ?? {}).filter(([id]) => drumIds.has(id)));
+    s.patterns.extraMelodies = Object.fromEntries(Object.entries(s.patterns.extraMelodies ?? {}).filter(([id]) => melodyIds.has(id)));
+  }
   p.fadeIn = data.fadeIn === true;
   p.fadeOut = data.fadeOut !== false;
 }

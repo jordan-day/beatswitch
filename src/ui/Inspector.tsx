@@ -1,5 +1,6 @@
 import { keyLabel, MOOD_INFO, TONICS } from '../music/chords';
 import { useProject, useUi } from '../state/project';
+import { MAIN_MELODY, melodyColor, melodyName, melodyTrack } from '../state/tracks';
 import {
   BASS_SOUNDS,
   DRUM_ROWS,
@@ -24,7 +25,7 @@ export const KEYS_LABEL: Record<KeysSound, string> = {
   pad: '☁️ Soft pad',
   musicbox: '🎐 Music box',
 };
-const MELODY_LABEL: Record<MelodySound, string> = {
+export const MELODY_LABEL: Record<MelodySound, string> = {
   musicbox: '🎐 Music box',
   kalimba: '🎙 Kalimba',
   glock: '🎙 Glockenspiel',
@@ -52,6 +53,15 @@ export function Inspector() {
   const p = useProject((s) => s.project);
   const { update, setKeyMood } = useProject();
   const track = useUi((s) => s.track);
+  // the melody being edited (the first one if the picked one was removed)
+  const pickedMelody = useUi((s) => s.melodyId);
+  const melodyId = melodyTrack(p, pickedMelody) ? pickedMelody : MAIN_MELODY;
+  const mel = melodyTrack(p, melodyId)!;
+  const editMelody = (fn: (m: NonNullable<ReturnType<typeof melodyTrack>>) => void, key?: string) =>
+    update((d) => {
+      const m = melodyTrack(d, melodyId);
+      if (m) fn(m);
+    }, key);
 
   return (
     <aside className="card p-4 flex flex-col gap-4 lg:overflow-y-auto min-h-0" aria-label="Settings">
@@ -138,8 +148,8 @@ export function Inspector() {
       )}
 
       {track === 'melody' && (
-        <Group title="Melody sound">
-          <select className="select" value={p.melody.sound} onChange={(e) => update((d) => void (d.melody.sound = e.target.value as MelodySound))}>
+        <Group title={p.extraMelodies.length ? `${melodyName(p, melodyId)} sound` : 'Melody sound'}>
+          <select className="select" value={mel.sound} onChange={(e) => editMelody((m) => void (m.sound = e.target.value as MelodySound))}>
             {MELODY_SOUNDS.map((s) => (
               <option key={s} value={s}>
                 {MELODY_LABEL[s]}
@@ -149,11 +159,11 @@ export function Inspector() {
           <div className="flex items-center justify-between" title="Move the whole melody up or down an octave">
             <span className="text-sm font-bold">Octave</span>
             <div className="flex items-center gap-1">
-              <button className="btn px-2.5 py-1" disabled={p.melody.octave <= 3} onClick={() => update((d) => void (d.melody.octave -= 1))}>
+              <button className="btn px-2.5 py-1" disabled={mel.octave <= 3} onClick={() => editMelody((m) => void (m.octave -= 1))}>
                 −
               </button>
-              <span className="text-sm font-bold w-6 text-center">{p.melody.octave}</span>
-              <button className="btn px-2.5 py-1" disabled={p.melody.octave >= 5} onClick={() => update((d) => void (d.melody.octave += 1))}>
+              <span className="text-sm font-bold w-6 text-center">{mel.octave}</span>
+              <button className="btn px-2.5 py-1" disabled={mel.octave >= 5} onClick={() => editMelody((m) => void (m.octave += 1))}>
                 +
               </button>
             </div>
@@ -162,11 +172,11 @@ export function Inspector() {
             <Slider
               className="flex-1"
               label="Volume"
-              value={p.melody.volume}
-              color="#f2a65a"
-              onChange={(v) => update((d) => void (d.melody.volume = v), 'vol:melody')}
+              value={mel.volume}
+              color={melodyColor(p, melodyId)}
+              onChange={(v) => editMelody((m) => void (m.volume = v), 'vol:melody:' + melodyId)}
             />
-            <MuteButton muted={p.melody.mute} onClick={() => update((d) => void (d.melody.mute = !d.melody.mute))} />
+            <MuteButton muted={mel.mute} onClick={() => editMelody((m) => void (m.mute = !m.mute))} />
           </div>
         </Group>
       )}

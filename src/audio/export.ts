@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { songSteps } from '../state/song';
-import { DRUM_ROWS, STEPS_PER_BAR, type Project } from '../state/types';
+import { allDrums } from '../state/tracks';
+import { STEPS_PER_BAR, type Project } from '../state/types';
 import { getCachedBuffer, loadSample } from '../storage/samples';
 import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
 import { encodeWav } from './wav';
@@ -20,7 +21,7 @@ export const songDuration = (p: Project) => songSteps(p) * stepSeconds(p.bpm);
 /** Render offline (faster than real time): `steps` 16th notes, each played by `play`. */
 async function render(p: Project, steps: number, play: (g: Graph, step: number, time: number) => void, fades: boolean) {
   await loadProjectBuiltins(p);
-  await Promise.all(DRUM_ROWS.map((r) => p.drums[r].sound).flatMap((s) => (s.kind === 'user' ? [loadSample(s.id)] : [])));
+  await Promise.all(allDrums(p).map((d) => d.track.sound).flatMap((s) => (s.kind === 'user' ? [loadSample(s.id)] : [])));
   const seconds = steps * stepSeconds(p.bpm) + TAIL_SECONDS;
 
   const rendered = await Tone.Offline(

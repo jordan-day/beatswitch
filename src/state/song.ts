@@ -1,4 +1,4 @@
-import { DRUM_ROWS, STEPS_PER_BAR, type BassStep, type ChordSlot, type DrumRow, type MelodyNote, type Project, type Step } from './types';
+import { DRUM_ROWS, MAX_STEPS, STEPS_PER_BAR, type BassStep, type ChordSlot, type DrumRow, type MelodyNote, type Project, type Step } from './types';
 
 /**
  * A song is a list of sections (Intro, Verse, Chorus...) arranged in blocks.
@@ -16,6 +16,10 @@ export interface SectionPatterns {
   bass: BassStep[];
   chords: { slots: (ChordSlot | null)[]; rhythm: Project['chords']['rhythm']; steps: boolean[]; hidden8?: (ChordSlot | null)[] };
   melody: MelodyNote[];
+  /** Hits of the added drum rows, by row id (a row added later is empty here until you fill it). */
+  extraDrums?: Record<string, Step[]>;
+  /** Notes of the added melodies, by melody id. */
+  extraMelodies?: Record<string, MelodyNote[]>;
 }
 
 export interface Section {
@@ -53,8 +57,12 @@ export function extractPatterns(p: Project): SectionPatterns {
     bass: p.bass.steps,
     chords: { slots: p.chords.slots, rhythm: p.chords.rhythm, steps: p.chords.steps, hidden8: p.chords.hidden8 },
     melody: p.melody.notes,
+    extraDrums: Object.fromEntries(p.extraDrums.map((d) => [d.id, d.steps])),
+    extraMelodies: Object.fromEntries(p.extraMelodies.map((m) => [m.id, m.notes])),
   });
 }
+
+const emptySteps = (): Step[] => Array.from({ length: MAX_STEPS }, () => 0 as Step);
 
 /** Write a section's patterns into a project (in place). */
 export function applyPatterns(p: Project, s: SectionPatterns) {
@@ -68,6 +76,8 @@ export function applyPatterns(p: Project, s: SectionPatterns) {
   if (c.chords.hidden8) p.chords.hidden8 = c.chords.hidden8;
   else delete p.chords.hidden8;
   p.melody.notes = c.melody;
+  for (const d of p.extraDrums) d.steps = c.extraDrums?.[d.id] ?? emptySteps();
+  for (const m of p.extraMelodies) m.notes = c.extraMelodies?.[m.id] ?? [];
 }
 
 /** The song structure every new project starts with: one section, played 4 times. */
@@ -95,6 +105,9 @@ export function sectionView(p: Project, sectionId: string): Project {
   view.chords.rhythm = s.patterns.chords.rhythm;
   view.chords.steps = s.patterns.chords.steps;
   view.melody.notes = s.patterns.melody;
+  const pt = s.patterns;
+  view.extraDrums = p.extraDrums.map((d) => ({ ...d, steps: pt.extraDrums?.[d.id] ?? emptySteps() }));
+  view.extraMelodies = p.extraMelodies.map((m) => ({ ...m, notes: pt.extraMelodies?.[m.id] ?? [] }));
   return view;
 }
 

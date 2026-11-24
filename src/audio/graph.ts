@@ -2,7 +2,6 @@ import * as Tone from 'tone';
 import { bassNote, degreeNote, slotNotes } from '../music/chords';
 import { chordHits, slotLength } from '../music/patterns';
 import {
-  DRUM_ROWS,
   MELODY_ROWS,
   SAMPLED_INSTRUMENTS,
   STEPS_PER_BAR,
@@ -16,6 +15,7 @@ import {
 } from '../state/types';
 import { getInstrument, getKitBuffer, kitSamplePath, loadBuiltins } from './builtinSamples';
 import { buildTimeline, FADE_IN_BARS, FADE_OUT_BARS, locate, type Part } from '../state/song';
+import { allDrums, allMelodies, MAIN_MELODY } from '../state/tracks';
 
 const toDb = (v: number) => (v <= 0.001 ? -Infinity : Tone.gainToDb(v));
 
@@ -48,12 +48,12 @@ import {
 
 /** Load every recorded sound a project uses (kit drums + instruments). Resolves when ready. */
 export function loadProjectBuiltins(p: Project): Promise<void> {
-  const kit = DRUM_ROWS.flatMap((r) => {
-    const s = p.drums[r].sound;
-    const path = s.kind === 'synth' ? kitSamplePath(r, s.id) : null;
+  const kit = allDrums(p).flatMap(({ voice, track }) => {
+    const s = track.sound;
+    const path = s.kind === 'synth' ? kitSamplePath(voice, s.id) : null;
     return path ? [path] : [];
   });
-  const inst = [p.chords.sound, p.melody.sound].filter((s): s is SampledInstrument =>
+  const inst = [p.chords.sound, ...allMelodies(p).map((m) => m.track.sound)].filter((s): s is SampledInstrument =>
     (SAMPLED_INSTRUMENTS as readonly string[]).includes(s),
   );
   return loadBuiltins(kit, inst);
@@ -95,18 +95,19 @@ export class Graph {
   private crackle: Tone.Player;
   private crackleGain = new Tone.Gain(0);
 
-  private drums = {} as Record<DrumRow, { voice: DrumVoice; vol: Tone.Volume; key: string }>;
+  /** Drum voices by row key (built-in row name or added row id). */
+  private drums: Record<string, { voice: DrumVoice; vol: Tone.Volume; key: string }> = {};
   private keys: { voice: KeysVoice; key: string } | null = null;
   private keysVol = new Tone.Volume(0);
-  private melody: { voice: KeysVoice; key: string } | null = null;
-  private melodyVol = new Tone.Volume(0);
+  /** Melody voices by melody id, each with its own volume. */
+  private melodies = new Map<string, { voice: KeysVoice; key: string; vol: Tone.Volume }>();
   private bass: Tone.MonoSynth | null = null;
   private bassKey = '';
   private bassVol = new Tone.Volume(0);
   private lastCrunch = -1;
 
   /** Called when a row's imported sample isn't available (it falls back to the built-in kit). */
-  onMissingSample?: (row: DrumRow) => void;
+  onMissingSample?: (name: string) => void;
 
   constructor(private getBuffer: BufferLookup) {
     // master chain: input -> [dry | crushed] -> lowpass -> reverb -> comp -> limiter -> out
@@ -120,7 +121,6 @@ export class Graph {
     this.crackle.sync().start(0);
 
     this.keysVol.chain(this.wobble, this.input);
-    this.melodyVol.connect(this.wobble);
     this.bassVol.connect(this.input);
   }
 
@@ -131,10 +131,17 @@ export class Graph {
 
   /** Bring every node in line with the project. Cheap to call on every edit. */
   apply(p: Project) {
-    for (const row of DRUM_ROWS) {
-      const t = p.drums[row];
+    const drums = allDrums(p);
+    // rows that were removed
+    for (const key of Object.keys(this.drums)) {
+      if (drums.some((d) => d.key === key)) continue;
+      this.drums[key].voice.dispose();
+      this.drums[key].vol.dispose();
+      delete this.drums[key];
+    }
+    for (const { key: row, voice: kind, track: t } of drums) {
       // built-in recorded kit sounds (or null for the synthesized kits)
-      const kitPath = t.sound.kind === 'synth' ? kitSamplePath(row, t.sound.id) : null;
+      const kitPath = t.sound.kind === 'synth' ? kitSamplePath(kind, t.sound.id) : null;
       const kitBuf = kitPath ? getKitBuffer(kitPath) : undefined;
       const buf = t.sound.kind === 'user' ? this.getBuffer(t.sound.id) : undefined;
       const key =
@@ -146,12 +153,12 @@ export class Graph {
       const cur = this.drums[row];
       if (!cur || cur.key !== key) {
         let v: DrumVoice;
-        if (kitBuf) v = makeSampleDrum(kitBuf, KIT_GAIN[row]);
-        else if (t.sound.kind === 'synth') v = makeSynthDrum(row, kitPath ? 'dusty' : t.sound.id); // synth stands in while a kit loads
+        if (kitBuf) v = makeSampleDrum(kitBuf, KIT_GAIN[kind]);
+        else if (t.sound.kind === 'synth') v = makeSynthDrum(kind, kitPath ? 'dusty' : t.sound.id); // synth stands in while a kit loads
         else if (buf) v = makeSampleDrum(buf);
         else {
-          v = makeSynthDrum(row, 'dusty');
-          this.onMissingSample?.(row);
+          v = makeSynthDrum(kind, 'dusty');
+          this.onMissingSample?.(t.sound.name);
         }
         const vol = cur?.vol ?? new Tone.Volume(0).connect(this.input);
         cur?.voice.dispose();
@@ -170,13 +177,26 @@ export class Graph {
     }
     this.keysVol.volume.value = toDb(p.chords.volume);
 
-    if (!this.melody || this.melody.key !== voiceKey(p.melody.sound)) {
-      this.melody?.voice.dispose();
-      this.melody = makeVoice(p.melody.sound);
-      this.melody.voice.output.connect(this.melodyVol);
+    const melodies = allMelodies(p);
+    for (const [id, m] of this.melodies) {
+      if (melodies.some((x) => x.id === id)) continue;
+      m.voice.dispose();
+      m.vol.dispose();
+      this.melodies.delete(id);
     }
-    // +5 dB: a single melody line needs to sit on top of the (multi-note) chords
-    this.melodyVol.volume.value = p.melody.mute ? -Infinity : toDb(p.melody.volume) + 5;
+    for (const { id, track } of melodies) {
+      let m = this.melodies.get(id);
+      if (!m || m.key !== voiceKey(track.sound)) {
+        m?.voice.dispose();
+        const vol = m?.vol ?? new Tone.Volume(0).connect(this.wobble);
+        const made = makeVoice(track.sound);
+        made.voice.output.connect(vol);
+        m = { ...made, vol };
+        this.melodies.set(id, m);
+      }
+      // +5 dB: a single melody line needs to sit on top of the (multi-note) chords
+      m.vol.volume.value = track.mute ? -Infinity : toDb(track.volume) + 5;
+    }
 
     if (!this.bass || this.bassKey !== p.bass.sound) {
       this.bass?.dispose();
@@ -220,11 +240,16 @@ export class Graph {
         if (k === 3) this.drums.openhat?.voice.trigger(time, 0.7);
         const hat = p.drums.hat.steps[step];
         if (hat) this.drums.hat?.voice.trigger(time, hat === 2 ? 0.9 : 0.6);
+        // added rows keep playing through the fill, like the hats
+        for (const d of p.extraDrums) {
+          const s = d.steps[step];
+          if (s) this.drums[d.id]?.voice.trigger(time, s === 2 ? 0.9 : 0.6);
+        }
       } else {
-        for (const row of DRUM_ROWS) {
-          const s = p.drums[row].steps[step];
+        for (const { key, track } of allDrums(p)) {
+          const s = track.steps[step];
           // Little bit of human feel: random velocity wobble.
-          if (s) this.drums[row]?.voice.trigger(time, (s === 2 ? 1 : 0.68) * (0.92 + Math.random() * 0.08));
+          if (s) this.drums[key]?.voice.trigger(time, (s === 2 ? 1 : 0.68) * (0.92 + Math.random() * 0.08));
         }
       }
     }
@@ -264,12 +289,16 @@ export class Graph {
       }
     }
 
-    if (this.melody && !mute?.melody) {
-      for (const m of p.melody.notes) {
-        if (m.s !== step || m.d >= MELODY_ROWS) continue;
-        const note = degreeNote(p.tonic, p.mood, p.melody.octave, m.d);
-        const l = Math.min(m.l, total - m.s);
-        this.melody.voice.play([note], l * sd * 0.92, time, 0.75 + Math.random() * 0.1);
+    if (!mute?.melody) {
+      for (const { id, track } of allMelodies(p)) {
+        const voice = this.melodies.get(id)?.voice;
+        if (!voice) continue;
+        for (const m of track.notes) {
+          if (m.s !== step || m.d >= MELODY_ROWS) continue;
+          const note = degreeNote(p.tonic, p.mood, track.octave, m.d);
+          const l = Math.min(m.l, total - m.s);
+          voice.play([note], l * sd * 0.92, time, 0.75 + Math.random() * 0.1);
+        }
       }
     }
   }
@@ -282,9 +311,9 @@ export class Graph {
     if (b) this.bass?.triggerAttackRelease(b, dur, time, 0.6);
   }
 
-  /** Play one melody note right now (piano roll / keyboard clicks). */
-  previewNote(note: string, kind: 'melody' | 'keys' = 'melody', dur = 0.4) {
-    const v = kind === 'melody' ? this.melody : this.keys;
+  /** Play one note right now (piano roll / keyboard clicks), on a melody's instrument or the chords'. */
+  previewNote(note: string, kind: 'melody' | 'keys' = 'melody', dur = 0.4, melodyId = MAIN_MELODY) {
+    const v = kind === 'melody' ? this.melodies.get(melodyId) : this.keys;
     v?.voice.play([note], dur, Tone.now(), 0.75);
   }
 
@@ -322,19 +351,22 @@ export class Graph {
 
   silence() {
     this.keys?.voice.releaseAll();
-    this.melody?.voice.releaseAll();
+    for (const m of this.melodies.values()) m.voice.releaseAll();
     this.bass?.triggerRelease();
   }
 
   dispose() {
-    for (const row of DRUM_ROWS) {
-      this.drums[row]?.voice.dispose();
-      this.drums[row]?.vol.dispose();
+    for (const d of Object.values(this.drums)) {
+      d.voice.dispose();
+      d.vol.dispose();
     }
     this.keys?.voice.dispose();
-    this.melody?.voice.dispose();
+    for (const m of this.melodies.values()) {
+      m.voice.dispose();
+      m.vol.dispose();
+    }
     this.bass?.dispose();
     [this.input, this.crushShaper, this.crushMix, this.filter, this.reverb, this.comp, this.limiter, this.master, this.songGain,
-      this.wobble, this.crackle, this.crackleGain, this.keysVol, this.melodyVol, this.bassVol].forEach((n) => n.dispose());
+      this.wobble, this.crackle, this.crackleGain, this.keysVol, this.bassVol].forEach((n) => n.dispose());
   }
 }

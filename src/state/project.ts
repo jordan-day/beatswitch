@@ -4,7 +4,22 @@ import { buildPreset } from '../music/presets';
 import { extendMelody, extendSteps, lofiMacro, randomDrums, rhythmToSteps } from '../music/patterns';
 import { parseProject } from './schema';
 import { applyPatterns, extractPatterns, MAX_REPEATS, newId, nextSectionName, noMutes, type Part } from './song';
-import type { BassStep, ChordRhythm, ChordSlot, DrumRow, FxSettings, MelodyNote, Mood, Project, Step } from './types';
+import { drumTrack, isDrumRow, MAIN_MELODY, melodyTrack } from './tracks';
+import {
+  MAX_EXTRA_DRUMS,
+  MAX_EXTRA_MELODIES,
+  MAX_STEPS,
+  MELODY_SOUNDS,
+  type BassStep,
+  type ChordRhythm,
+  type ChordSlot,
+  type DrumRow,
+  type FxSettings,
+  type MelodyNote,
+  type Mood,
+  type Project,
+  type Step,
+} from './types';
 
 const AUTOSAVE_KEY = 'beatswitch:autosave';
 const HISTORY_LIMIT = 100;
@@ -19,17 +34,27 @@ interface ProjectStore {
   undo: () => void;
   redo: () => void;
 
-  toggleStep: (row: DrumRow, index: number) => void;
+  /** Cycle a drum hit. `row` is a built-in row name or an added row's id. */
+  toggleStep: (row: string, index: number) => void;
   toggleBass: (index: number) => void;
   toggleChordStep: (index: number) => void;
-  clearRow: (row: DrumRow | 'bass' | 'chords' | 'melody') => void;
+  /** Clear a row in every bar: a drum row (name or added row id), the bass, the chord hits, or the first melody. */
+  clearRow: (row: string) => void;
   setSlot: (i: number, slot: ChordSlot | null) => void;
   setChordCount: (n: 4 | 8) => void;
   setRhythm: (r: ChordRhythm) => void;
   setKeyMood: (tonic: string, mood: Mood) => void;
-  addNote: (n: MelodyNote) => void;
-  resizeNote: (s: number, d: number, l: number) => void;
-  removeNote: (s: number, d: number) => void;
+  /** Melody notes; `melody` is MAIN_MELODY (the default) or an added melody's id. */
+  addNote: (n: MelodyNote, melody?: string) => void;
+  resizeNote: (s: number, d: number, l: number, melody?: string) => void;
+  removeNote: (s: number, d: number, melody?: string) => void;
+  clearMelody: (melody: string) => void;
+  /** Add a drum row to the pad; returns its id ('' when the pad is full). */
+  addDrum: () => string;
+  removeDrum: (id: string) => void;
+  /** Add a melody with its own instrument; returns its id ('' when there are already as many as allowed). */
+  addMelody: () => string;
+  removeMelody: (id: string) => void;
   randomize: () => void;
   setBars: (bars: 1 | 2 | 4) => void;
   setLofi: (v: number) => void;
@@ -121,8 +146,8 @@ export const useProject = create<ProjectStore>((set, get) => ({
   toggleStep: (row, i) =>
     get().update((p) => {
       // off -> on -> accent -> off
-      const cur = p.drums[row].steps[i];
-      p.drums[row].steps[i] = ((cur + 1) % 3) as Step;
+      const t = drumTrack(p, row);
+      if (t) t.steps[i] = ((t.steps[i] + 1) % 3) as Step;
     }),
 
   // off -> root -> fifth -> octave -> off
@@ -136,7 +161,10 @@ export const useProject = create<ProjectStore>((set, get) => ({
       if (row === 'melody') p.melody.notes = [];
       else if (row === 'bass') p.bass.steps = p.bass.steps.map(() => 0);
       else if (row === 'chords') p.chords.steps = p.chords.steps.map(() => false);
-      else p.drums[row].steps = p.drums[row].steps.map(() => 0);
+      else {
+        const t = drumTrack(p, row);
+        if (t) t.steps = t.steps.map(() => 0);
+      }
     }),
 
   randomize: () =>
@@ -154,6 +182,8 @@ export const useProject = create<ProjectStore>((set, get) => ({
       for (const row of Object.keys(p.drums) as DrumRow[]) {
         p.drums[row].steps = extendSteps(p.drums[row].steps, old, bars);
       }
+      for (const d of p.extraDrums) d.steps = extendSteps(d.steps, old, bars);
+      for (const m of p.extraMelodies) m.notes = extendMelody(m.notes, old, bars);
       p.bass.steps = extendSteps(p.bass.steps, old, bars);
       p.chords.steps = extendSteps(p.chords.steps, old, bars);
       p.melody.notes = extendMelody(p.melody.notes, old, bars);
@@ -215,22 +245,70 @@ export const useProject = create<ProjectStore>((set, get) => ({
       p.mood = mood;
     }),
 
-  addNote: (n) =>
+  addNote: (n, melody = MAIN_MELODY) =>
     get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (!m) return;
       // a new note replaces anything it overlaps on the same row
-      p.melody.notes = p.melody.notes.filter((x) => x.d !== n.d || x.s + x.l <= n.s || x.s >= n.s + n.l);
-      p.melody.notes.push(n);
+      m.notes = m.notes.filter((x) => x.d !== n.d || x.s + x.l <= n.s || x.s >= n.s + n.l);
+      m.notes.push(n);
     }),
 
-  resizeNote: (s, d, l) =>
+  resizeNote: (s, d, l, melody = MAIN_MELODY) =>
     get().update((p) => {
-      const note = p.melody.notes.find((x) => x.s === s && x.d === d);
-      if (!note) return;
+      const m = melodyTrack(p, melody);
+      const note = m?.notes.find((x) => x.s === s && x.d === d);
+      if (!m || !note) return;
       note.l = Math.max(1, Math.min(l, p.bars * 16 - s));
-      p.melody.notes = p.melody.notes.filter((x) => x === note || x.d !== d || x.s < s || x.s >= s + note.l);
-    }, `melody-resize:${s}:${d}`),
+      m.notes = m.notes.filter((x) => x === note || x.d !== d || x.s < s || x.s >= s + note.l);
+    }, `melody-resize:${melody}:${s}:${d}`),
 
-  removeNote: (s, d) => get().update((p) => void (p.melody.notes = p.melody.notes.filter((x) => !(x.s === s && x.d === d)))),
+  removeNote: (s, d, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (m) m.notes = m.notes.filter((x) => !(x.s === s && x.d === d));
+    }),
+
+  clearMelody: (melody) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (m) m.notes = [];
+    }),
+
+  addDrum: () => {
+    if (get().project.extraDrums.length >= MAX_EXTRA_DRUMS) return '';
+    const id = newId();
+    get().update((p) => {
+      // starts as a recorded shaker: a sound none of the built-in rows use
+      p.extraDrums.push({ id, voice: 'perc', sound: { kind: 'synth', id: 'shaker' }, steps: Array.from({ length: MAX_STEPS }, () => 0 as Step), volume: 0.6, mute: false });
+    });
+    return id;
+  },
+
+  removeDrum: (id) =>
+    get().update((p) => {
+      if (isDrumRow(id)) return; // the built-in rows stay
+      p.extraDrums = p.extraDrums.filter((d) => d.id !== id);
+      for (const s of p.sections) delete s.patterns?.extraDrums?.[id];
+    }),
+
+  addMelody: () => {
+    if (get().project.extraMelodies.length >= MAX_EXTRA_MELODIES) return '';
+    const id = newId();
+    get().update((p) => {
+      // a different instrument from the melodies already there, so the new line stands out
+      const used = new Set([p.melody.sound, ...p.extraMelodies.map((m) => m.sound)]);
+      const sound = MELODY_SOUNDS.find((s) => !used.has(s)) ?? MELODY_SOUNDS[0];
+      p.extraMelodies.push({ id, sound, octave: p.melody.octave, notes: [], volume: 0.6, mute: false });
+    });
+    return id;
+  },
+
+  removeMelody: (id) =>
+    get().update((p) => {
+      p.extraMelodies = p.extraMelodies.filter((m) => m.id !== id);
+      for (const s of p.sections) delete s.patterns?.extraMelodies?.[id];
+    }),
 
   setLofi: (v) =>
     get().update((p) => {
@@ -336,6 +414,7 @@ interface UiStore {
   songStep: number; // playhead step in the whole song (song mode), -1 otherwise
   viewBar: number; // which bar the grid shows
   selectedSlot: number; // chord being edited
+  melodyId: string; // melody being edited (MAIN_MELODY or an added melody's id)
   track: Track; // which editor is open
   helpOpen: boolean;
   toast: { id: number; text: string; action?: { label: string; run: () => void } } | null;
@@ -352,6 +431,7 @@ export const useUi = create<UiStore>((set) => ({
   songStep: -1,
   viewBar: 0,
   selectedSlot: 0,
+  melodyId: MAIN_MELODY,
   track: 'beat',
   helpOpen: false,
   toast: null,

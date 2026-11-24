@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { useProject, useUi } from '../state/project';
-import { DRUM_ROWS, STEPS_PER_BAR, type ChordSlot, type Project } from '../state/types';
+import { STEPS_PER_BAR, type ChordSlot, type Project } from '../state/types';
+import { allDrums } from '../state/tracks';
 import { getCachedBuffer, loadSample } from '../storage/samples';
 import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
 import { songSteps } from '../state/song';
@@ -49,8 +50,8 @@ function syncTransport(p: Project) {
 /** Load any recorded or imported sounds this project uses, then re-apply so they replace the stand-ins. */
 function ensureSamples(p: Project) {
   loadProjectBuiltins(p).then(() => graph?.apply(useProject.getState().project));
-  for (const r of DRUM_ROWS) {
-    const s = p.drums[r].sound;
+  for (const { track } of allDrums(p)) {
+    const s = track.sound;
     if (s.kind === 'user' && !getCachedBuffer(s.id)) {
       loadSample(s.id).then((buf) => {
         if (buf && graph) graph.apply(useProject.getState().project);
@@ -67,8 +68,8 @@ export function ensureAudio(): Promise<Graph> {
       await Tone.start();
       Tone.getContext().lookAhead = 0.08;
       const g = new Graph(getCachedBuffer);
-      g.onMissingSample = (row) =>
-        useUi.getState().notify(`The "${row}" sample isn't saved in this browser, so the built-in sound is playing instead.`);
+      g.onMissingSample = (name) =>
+        useUi.getState().notify(`The "${name}" sample isn't saved in this browser, so the built-in sound is playing instead.`);
       const p = useProject.getState().project;
       g.apply(p);
       syncTransport(p);
@@ -174,7 +175,7 @@ export async function previewProgression(chords: (ChordSlot | string | null)[]) 
 }
 
 /** Hear a single note (piano roll / chord keyboard). */
-export async function previewNote(note: string, kind: 'melody' | 'keys' = 'melody') {
+export async function previewNote(note: string, kind: 'melody' | 'keys' = 'melody', melodyId?: string) {
   const g = await ensureAudio();
-  g.previewNote(note, kind);
+  g.previewNote(note, kind, undefined, melodyId);
 }

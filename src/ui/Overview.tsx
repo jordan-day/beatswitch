@@ -1,6 +1,7 @@
 import { slotLength } from '../music/patterns';
 import { useProject, useUi, type Track } from '../state/project';
 import { sectionColor } from '../state/song';
+import { allMelodies, melodyColor } from '../state/tracks';
 import { DRUM_ROWS, MELODY_ROWS, STEPS_PER_BAR } from '../state/types';
 
 const DRUM_COLORS = ['#e8916b', '#e6c27a', '#9ccf9a', '#7fc4c9', '#b6a2e0'];
@@ -14,7 +15,7 @@ const LANES: { id: 'drums' | 'bass' | 'chords' | 'melody'; track: Track; label: 
 
 /**
  * The whole loop at a glance: one compact lane per part, with the playhead running across.
- * Clicking a lane opens its editor; clicking inside it also jumps the editor to that bar.
+ * Clicking a lane's name opens its editor; clicking a "Bar n" label jumps the editor to that bar.
  */
 export function Overview() {
   const p = useProject((s) => s.project);
@@ -25,8 +26,8 @@ export function Overview() {
   const count = p.chords.slots.length;
   const len = slotLength(p.bars, count);
   const activeSlot = step >= 0 ? Math.min(count - 1, Math.floor(step / len)) : -1;
-  // The overview is a picture of the section. Its one control is the "Bar n" row, which picks the
-  // bar to edit (the editor tabs switch editors; chords are picked in the Chords editor).
+  // The overview is a picture of the section. Its controls: the "Bar n" row picks the bar to edit,
+  // and the lane names (Drums, Bass, Chords, Melody) open that part's editor.
 
   return (
     <section className="card p-3 sm:p-3 shrink-0" aria-label="Section overview">
@@ -35,16 +36,19 @@ export function Overview() {
         <div className="w-24 shrink-0 flex flex-col gap-1">
           <SectionSwitcher />
           {LANES.map((l) => (
-            <div
+            <button
               key={l.id}
+              onClick={() => set({ track: l.track })}
+              aria-pressed={track === l.track}
+              title={`Open the ${{ beat: 'Beat', chords: 'Chords', melody: 'Melody' }[l.track]} editor`}
               className={
-                'h-6 rounded-lg px-2 text-sm font-bold flex items-center gap-1.5 ' +
-                (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500')
+                'h-6 rounded-lg px-2 text-sm font-bold flex items-center gap-1.5 text-left transition ' +
+                (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-700')
               }
             >
               <span aria-hidden="true">{l.icon}</span>
               {l.label}
-            </div>
+            </button>
           ))}
         </div>
 
@@ -132,26 +136,30 @@ export function Overview() {
           </Lane>
 
           {/* melody: a tiny piano roll */}
-          <Lane active={track === 'melody'} dim={p.melody.mute}>
+          {/* every melody, each in its own colour (a muted one is faint) */}
+          <Lane active={track === 'melody'} dim={allMelodies(p).every((m) => m.track.mute)}>
             <div className="relative h-full">
-              {p.melody.notes.length === 0 && (
+              {allMelodies(p).every((m) => m.track.notes.length === 0) && (
                 <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-cream-500">No melody yet</span>
               )}
-              {p.melody.notes
-                .filter((n) => n.s < total)
-                .map((n) => (
-                  <div
-                    key={`${n.s}-${n.d}`}
-                    className="absolute rounded-[2px]"
-                    style={{
-                      left: `${(n.s / total) * 100}%`,
-                      width: `${(Math.min(n.l, total - n.s) / total) * 100}%`,
-                      bottom: `${(n.d / MELODY_ROWS) * 100}%`,
-                      height: `${100 / MELODY_ROWS + 2}%`,
-                      background: '#f2a65a',
-                    }}
-                  />
-                ))}
+              {allMelodies(p).flatMap(({ id, track: m }) =>
+                m.notes
+                  .filter((n) => n.s < total)
+                  .map((n) => (
+                    <div
+                      key={`${id}-${n.s}-${n.d}`}
+                      className="absolute rounded-[2px]"
+                      style={{
+                        left: `${(n.s / total) * 100}%`,
+                        width: `${(Math.min(n.l, total - n.s) / total) * 100}%`,
+                        bottom: `${(n.d / MELODY_ROWS) * 100}%`,
+                        height: `${100 / MELODY_ROWS + 2}%`,
+                        background: melodyColor(p, id),
+                        opacity: m.mute ? 0.35 : 1,
+                      }}
+                    />
+                  )),
+              )}
             </div>
           </Lane>
 
