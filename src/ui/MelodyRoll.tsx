@@ -3,7 +3,7 @@ import { Note } from 'tonal';
 import { ensureAudio, previewNote } from '../audio/engine';
 import { degreeNote, slotNotes } from '../music/chords';
 import { slotLength } from '../music/patterns';
-import { useProject, useUi } from '../state/project';
+import { useProject, useUi, withUndo } from '../state/project';
 import { MELODY_ROWS, STEPS_PER_BAR } from '../state/types';
 import { EditorHeader } from './EditorHeader';
 
@@ -79,7 +79,12 @@ export function MelodyRoll() {
     <>
       <EditorHeader barPicker>
         {m.mute && <span className="text-xs font-bold text-kick">🔇 Melody is muted</span>}
-        <button className="btn text-xs" onClick={() => clearRow('melody')} title="Remove all melody notes">
+        <button
+          className="btn text-xs"
+          onClick={() => withUndo('Melody cleared', () => clearRow('melody'))}
+          title="Remove all melody notes (every bar)"
+          disabled={m.notes.length === 0}
+        >
           ✕ Clear melody
         </button>
       </EditorHeader>
@@ -97,6 +102,21 @@ export function MelodyRoll() {
                   style={{ gridColumn: `${c.col + 1} / span ${c.span}` }}
                 >
                   {c.name}
+                </div>
+              ))}
+              {/* beat numbers, so you can count along */}
+              {Array.from({ length: STEPS_PER_BAR }, (_, i) => (
+                <div
+                  key={'beat' + i}
+                  aria-hidden="true"
+                  className={
+                    'row-start-2 text-center leading-none ' +
+                    (i % 4 === 0 ? 'text-[11px] font-extrabold ' : 'text-[9px] ') +
+                    (playStep >= offset && Math.floor((playStep - offset) / 4) === Math.floor(i / 4) ? 'text-cream-100' : 'text-cream-500')
+                  }
+                  style={{ gridColumn: i + 1 }}
+                >
+                  {i % 4 === 0 ? i / 4 + 1 : '·'}
                 </div>
               ))}
             </div>
@@ -145,7 +165,7 @@ export function MelodyRoll() {
                       onPointerDown={(e) => startNew(e, d)}
                       className={
                         'cell rounded-sm ' +
-                        (inChord ? 'bg-chord/25 ' : i % 4 === 0 ? 'bg-ink-600/80 ' : 'bg-ink-700 ') +
+                        (inChord ? 'bg-chord/45 ' : i % 4 === 0 ? 'bg-ink-600/80 ' : 'bg-ink-700 ') +
                         (now ? 'ring-1 ring-cream-100/70' : '')
                       }
                       style={{ gridColumn: i + 1, gridRow: r + 1 }}

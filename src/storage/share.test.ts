@@ -33,7 +33,8 @@ describe('share links', () => {
   });
 
   it('keeps links reasonably short', () => {
-    expect(encodeProject(buildPreset(0)).hash.length).toBeLessThan(1200);
+    // a starter beat is a 5-block song now; links still fit comfortably in a chat message
+    expect(encodeProject(buildPreset(0)).hash.length).toBeLessThan(1600);
   });
 
   it('rejects garbage', () => {

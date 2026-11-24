@@ -4,6 +4,8 @@ export type DrumRow = (typeof DRUM_ROWS)[number];
 export const MOODS = ['chill', 'dreamy', 'sad', 'jazzy'] as const;
 export type Mood = (typeof MOODS)[number];
 
+import type { Section, SongBlock } from './song';
+
 /** Sampled (recorded) instruments, from VCSL (CC0); see public/samples. */
 export const SAMPLED_INSTRUMENTS = ['piano', 'vibes', 'kalimba', 'glock', 'ocarina'] as const;
 export type SampledInstrument = (typeof SAMPLED_INSTRUMENTS)[number];
@@ -93,6 +95,8 @@ export interface Project {
     /** Hit pattern used when rhythm is 'custom'. */
     steps: boolean[];
     volume: number;
+    /** The 8 chords from before switching to 4, so switching back to 8 restores them. */
+    hidden8?: (ChordSlot | null)[];
   };
   bass: {
     enabled: boolean;
@@ -108,6 +112,15 @@ export interface Project {
     mute: boolean;
   };
   fx: FxSettings;
+
+  // ---- song arrangement (see state/song.ts) ----
+  /** All sections. The active one's patterns are the top-level fields above. */
+  sections: Section[];
+  activeSection: string;
+  /** The arrangement: sections in order, with repeats, part mutes and fills. */
+  song: SongBlock[];
+  fadeIn: boolean;
+  fadeOut: boolean;
 }
 
 export const BPM_MIN = 60;

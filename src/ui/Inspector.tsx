@@ -8,7 +8,6 @@ import {
   MELODY_SOUNDS,
   MOODS,
   type BassSound,
-  type ChordRhythm,
   type KeysSound,
   type MelodySound,
   type SynthKit,
@@ -38,12 +37,6 @@ const MELODY_LABEL: Record<MelodySound, string> = {
 };
 const BASS_LABEL: Record<BassSound, string> = { round: 'Round', sub: 'Deep sub', pluck: 'Plucky' };
 const KIT_LABEL: Record<(typeof FULL_KITS)[number], string> = { acoustic: '🎙 Acoustic', dusty: 'Dusty (synth)', soft: 'Soft (synth)' };
-const RHYTHM_LABEL: Record<ChordRhythm, { label: string; hint: string }> = {
-  whole: { label: 'Long', hint: 'Each chord rings out' },
-  half: { label: 'Twice', hint: 'Each chord plays two times' },
-  stab: { label: 'Bouncy', hint: 'Short rhythmic hits' },
-  custom: { label: '✏️ Custom', hint: 'Draw exactly when chords play, in the Beat editor' },
-};
 
 function Group(props: { title: string; children: React.ReactNode }) {
   return (
@@ -57,12 +50,12 @@ function Group(props: { title: string; children: React.ReactNode }) {
 /** Right-hand settings column: song-wide settings, the open part's sound settings, and the lo-fi knob. */
 export function Inspector() {
   const p = useProject((s) => s.project);
-  const { update, setKeyMood, setRhythm } = useProject();
+  const { update, setKeyMood } = useProject();
   const track = useUi((s) => s.track);
 
   return (
     <aside className="card p-4 flex flex-col gap-4 lg:overflow-y-auto min-h-0" aria-label="Settings">
-      <Group title="Song">
+      <Group title="Key & mood">
         <div className="grid grid-cols-2 gap-1">
           {MOODS.map((m) => (
             <button
@@ -149,24 +142,6 @@ export function Inspector() {
               </option>
             ))}
           </select>
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-bold">Rhythm</span>
-            <div className="grid grid-cols-2 gap-1">
-              {(Object.keys(RHYTHM_LABEL) as ChordRhythm[]).map((r) => (
-                <button
-                  key={r}
-                  className={'chip text-xs px-2 ' + (p.chords.rhythm === r ? 'chip-on' : '')}
-                  title={RHYTHM_LABEL[r].hint}
-                  onClick={() => setRhythm(r)}
-                >
-                  {RHYTHM_LABEL[r].label}
-                </button>
-              ))}
-            </div>
-            {p.chords.rhythm === 'custom' && (
-              <p className="text-xs text-cream-500">Draw the hits in the 🎹 Chords row of the Beat editor.</p>
-            )}
-          </div>
           <Slider label="Volume" value={p.chords.volume} color="#8fb3e5" onChange={(v) => update((d) => void (d.chords.volume = v), 'vol:chords')} />
         </Group>
       )}

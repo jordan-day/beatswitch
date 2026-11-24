@@ -3,6 +3,7 @@ import { PROGRESSIONS, progressionChords, transposeSlot } from '../music/chords'
 import { buildPreset } from '../music/presets';
 import { extendMelody, extendSteps, lofiMacro, randomDrums, rhythmToSteps } from '../music/patterns';
 import { parseProject } from './schema';
+import { applyPatterns, extractPatterns, MAX_REPEATS, newId, nextSectionName, noMutes, type Part } from './song';
 import type { BassStep, ChordRhythm, ChordSlot, DrumRow, FxSettings, MelodyNote, Mood, Project, Step } from './types';
 
 const AUTOSAVE_KEY = 'beatswitch:autosave';
@@ -33,6 +34,32 @@ interface ProjectStore {
   setBars: (bars: 1 | 2 | 4) => void;
   setLofi: (v: number) => void;
   setFx: (key: keyof Omit<FxSettings, 'lofi'>, v: number) => void;
+
+  // song: sections + arrangement
+  switchSection: (id: string) => void;
+  addSection: () => void;
+  duplicateSection: (id: string) => void;
+  renameSection: (id: string, name: string) => void;
+  deleteSection: (id: string) => void;
+  addBlock: (sectionId: string) => void;
+  removeBlock: (index: number) => void;
+  moveBlock: (index: number, by: -1 | 1) => void;
+  setRepeats: (index: number, repeats: number) => void;
+  toggleBlockMute: (index: number, part: Part) => void;
+  toggleFill: (index: number) => void;
+  setFade: (which: 'fadeIn' | 'fadeOut', on: boolean) => void;
+}
+
+/** Make `id` the section being edited: park the current patterns, bring in the target's. */
+function switchTo(p: Project, id: string) {
+  if (id === p.activeSection) return;
+  const target = p.sections.find((s) => s.id === id);
+  const current = p.sections.find((s) => s.id === p.activeSection);
+  if (!target?.patterns || !current) return;
+  current.patterns = extractPatterns(p);
+  applyPatterns(p, target.patterns);
+  delete target.patterns;
+  p.activeSection = id;
 }
 
 let lastCoalesce = { key: '', at: 0 };
@@ -59,6 +86,8 @@ export const useProject = create<ProjectStore>((set, get) => ({
     const { project, past } = get();
     const next = structuredClone(project);
     fn(next);
+    // a click that changes nothing (same mood, same rhythm...) shouldn't add an undo step
+    if (JSON.stringify(next) === JSON.stringify(project)) return;
     const now = Date.now();
     const merge = coalesceKey && lastCoalesce.key === coalesceKey && now - lastCoalesce.at < 600;
     lastCoalesce = { key: coalesceKey ?? '', at: now };
@@ -98,13 +127,13 @@ export const useProject = create<ProjectStore>((set, get) => ({
 
   toggleChordStep: (i) => get().update((p) => void (p.chords.steps[i] = !p.chords.steps[i])),
 
+  // Clears the whole row, including bars hidden by a shorter loop, so nothing comes back later.
   clearRow: (row) =>
     get().update((p) => {
-      const n = p.bars * 16;
-      if (row === 'melody') p.melody.notes = p.melody.notes.filter((x) => x.s >= n);
-      else if (row === 'bass') for (let i = 0; i < n; i++) p.bass.steps[i] = 0;
-      else if (row === 'chords') for (let i = 0; i < n; i++) p.chords.steps[i] = false;
-      else for (let i = 0; i < n; i++) p.drums[row].steps[i] = 0;
+      if (row === 'melody') p.melody.notes = [];
+      else if (row === 'bass') p.bass.steps = p.bass.steps.map(() => 0);
+      else if (row === 'chords') p.chords.steps = p.chords.steps.map(() => false);
+      else p.drums[row].steps = p.drums[row].steps.map(() => 0);
     }),
 
   randomize: () =>
@@ -116,6 +145,7 @@ export const useProject = create<ProjectStore>((set, get) => ({
     }),
 
   setBars: (bars) =>
+    bars !== get().project.bars &&
     get().update((p) => {
       const old = p.bars;
       for (const row of Object.keys(p.drums) as DrumRow[]) {
@@ -133,15 +163,32 @@ export const useProject = create<ProjectStore>((set, get) => ({
     get().update((p) => {
       const cur = p.chords.slots;
       if (cur.length === n) return;
-      // 4 -> 8: each chord twice (sounds the same); 8 -> 4: keep every other one
-      p.chords.slots = n > cur.length ? cur.flatMap((s) => [s, s && structuredClone(s)]) : cur.filter((_, i) => i % 2 === 0);
+      if (n < cur.length) {
+        // 8 -> 4: keep every other chord, and remember all 8 so switching back loses nothing
+        p.chords.hidden8 = structuredClone(cur);
+        p.chords.slots = cur.filter((_, i) => i % 2 === 0);
+        return;
+      }
+      // 4 -> 8: bring the earlier 8 back if the 4 shown are still the ones they left;
+      // otherwise play each chord twice (sounds the same as before)
+      const saved = p.chords.hidden8;
+      const unchanged = saved?.length === 8 && saved.filter((_, i) => i % 2 === 0).every((s, i) => JSON.stringify(s) === JSON.stringify(cur[i]));
+      p.chords.slots = unchanged ? saved! : cur.flatMap((s) => [s, s && structuredClone(s)]);
+      delete p.chords.hidden8;
     }),
 
   setRhythm: (r) =>
     get().update((p) => {
       if (r === 'custom' && p.chords.rhythm !== 'custom') {
-        // start the custom pattern from whatever the current rhythm sounds like
-        p.chords.steps = rhythmToSteps(p.chords.rhythm, p.bars, p.chords.slots.length);
+        // Keep a pattern you drew before. Only when there's nothing of your own yet (empty, or one of
+        // the ready-made rhythms) start from whatever the current rhythm sounds like.
+        const pattern = JSON.stringify(p.chords.steps);
+        const untouched =
+          !p.chords.steps.some(Boolean) ||
+          (['whole', 'half', 'stab'] as const).some(
+            (rh) => JSON.stringify(rhythmToSteps(rh, p.bars, p.chords.slots.length)) === pattern,
+          );
+        if (untouched) p.chords.steps = rhythmToSteps(p.chords.rhythm, p.bars, p.chords.slots.length);
       }
       p.chords.rhythm = r;
     }),
@@ -149,11 +196,14 @@ export const useProject = create<ProjectStore>((set, get) => ({
   setKeyMood: (tonic, mood) =>
     get().update((p) => {
       const key = (s: (ChordSlot | null)[]) => s.map((x) => (x ? x.symbol + (x.notes ? '*' : '') : '-')).join();
+      // a ready-made progression fills 4 chords, or 8 with each played twice
+      const per = p.chords.slots.length / 4;
+      const asSlots = (chords: string[]) => chords.flatMap((symbol) => Array.from({ length: per }, () => ({ symbol })));
       const cur = key(p.chords.slots);
-      const idx = PROGRESSIONS[p.mood].findIndex((pr) => key(progressionChords(p.tonic, pr).map((symbol) => ({ symbol }))) === cur);
-      if (idx >= 0 && p.chords.slots.length === 4) {
+      const idx = PROGRESSIONS[p.mood].findIndex((pr) => key(asSlots(progressionChords(p.tonic, pr))) === cur);
+      if (idx >= 0) {
         // still one of the ready-made progressions: swap to the same one in the new key/mood
-        p.chords.slots = progressionChords(tonic, PROGRESSIONS[mood][idx]).map((symbol) => ({ symbol }));
+        p.chords.slots = asSlots(progressionChords(tonic, PROGRESSIONS[mood][idx]));
       } else if (tonic !== p.tonic) {
         // hand-made chords: move them to the new key
         p.chords.slots = p.chords.slots.map((s) => s && transposeSlot(s, p.tonic, tonic));
@@ -185,14 +235,68 @@ export const useProject = create<ProjectStore>((set, get) => ({
     }, 'lofi'),
 
   setFx: (key, v) => get().update((p) => void (p.fx[key] = v), 'fx:' + key),
+
+  switchSection: (id) => get().update((p) => switchTo(p, id)),
+
+  // a new section starts as a copy of the one you're on, is added to the end of the song, and opens
+  addSection: () =>
+    get().update((p) => {
+      const id = newId();
+      p.sections.push({ id, name: nextSectionName(p), patterns: extractPatterns(p) });
+      p.song.push({ id: newId(), section: id, repeats: 2, mute: noMutes(), fill: false });
+      switchTo(p, id);
+    }),
+
+  duplicateSection: (id) =>
+    get().update((p) => {
+      const src = p.sections.find((s) => s.id === id);
+      if (!src) return;
+      const patterns = id === p.activeSection ? extractPatterns(p) : structuredClone(src.patterns!);
+      const copy = { id: newId(), name: `${src.name} 2`.slice(0, 24), patterns };
+      p.sections.splice(p.sections.indexOf(src) + 1, 0, copy);
+    }),
+
+  renameSection: (id, name) =>
+    get().update((p) => {
+      const s = p.sections.find((x) => x.id === id);
+      if (s) s.name = name.slice(0, 24) || s.name;
+    }, 'rename:' + id),
+
+  deleteSection: (id) =>
+    get().update((p) => {
+      if (p.sections.length <= 1) return; // a song always has at least one section
+      if (id === p.activeSection) switchTo(p, p.sections.find((s) => s.id !== id)!.id);
+      p.sections = p.sections.filter((s) => s.id !== id);
+      p.song = p.song.filter((b) => b.section !== id);
+    }),
+
+  addBlock: (sectionId) =>
+    get().update((p) => void p.song.push({ id: newId(), section: sectionId, repeats: 1, mute: noMutes(), fill: false })),
+
+  removeBlock: (i) => get().update((p) => void p.song.splice(i, 1)),
+
+  moveBlock: (i, by) =>
+    get().update((p) => {
+      const j = i + by;
+      if (j < 0 || j >= p.song.length) return;
+      [p.song[i], p.song[j]] = [p.song[j], p.song[i]];
+    }),
+
+  setRepeats: (i, n) => get().update((p) => void (p.song[i] && (p.song[i].repeats = Math.max(1, Math.min(MAX_REPEATS, n))))),
+
+  toggleBlockMute: (i, part) => get().update((p) => void (p.song[i] && (p.song[i].mute[part] = !p.song[i].mute[part]))),
+
+  toggleFill: (i) => get().update((p) => void (p.song[i] && (p.song[i].fill = !p.song[i].fill))),
+
+  setFade: (which, on) => get().update((p) => void (p[which] = on)),
 }));
 
 // Autosave (debounced) to localStorage.
-let saveTimer: number | undefined;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 useProject.subscribe((s, prev) => {
-  if (s.project === prev.project) return;
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
+  if (s.project === prev.project || typeof localStorage === 'undefined') return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(s.project));
     } catch {
@@ -205,25 +309,54 @@ export type Track = 'beat' | 'chords' | 'melody';
 
 /** Small UI-only state that shouldn't go into undo history or saves. */
 interface UiStore {
+  /** Editing one section (overview + Beat/Chords/Melody), or arranging the whole song. */
+  view: 'section' | 'song';
   playing: boolean;
-  step: number; // current playhead step, -1 when stopped
+  /** Play loops the section being edited, or plays the whole arrangement once. */
+  playMode: 'section' | 'song';
+  step: number; // playhead step in the section being edited, -1 when it isn't the one playing
+  songStep: number; // playhead step in the whole song (song mode), -1 otherwise
   viewBar: number; // which bar the grid shows
   selectedSlot: number; // chord being edited
   track: Track; // which editor is open
   helpOpen: boolean;
-  toast: { id: number; text: string } | null;
+  toast: { id: number; text: string; action?: { label: string; run: () => void } } | null;
   set: (s: Partial<Omit<UiStore, 'set' | 'notify'>>) => void;
-  notify: (text: string) => void;
+  notify: (text: string, action?: { label: string; run: () => void }) => void;
 }
 
 export const useUi = create<UiStore>((set) => ({
+  view: 'section',
   playing: false,
+  playMode: 'section',
   step: -1,
+  songStep: -1,
   viewBar: 0,
   selectedSlot: 0,
   track: 'beat',
   helpOpen: false,
   toast: null,
   set: (s) => set(s),
-  notify: (text) => set({ toast: { id: Date.now(), text } }),
+  notify: (text, action) => set({ toast: { id: Date.now(), text, action } }),
 }));
+
+/**
+ * Run a big or destructive edit (clear, randomize, load...) and offer a one-click Undo for it.
+ * The Undo only applies while that edit is still the latest one, so it never undoes something else.
+ */
+export function withUndo(message: string, edit: () => void) {
+  const projectBefore = useProject.getState().project;
+  edit();
+  const { past, project } = useProject.getState();
+  if (project === projectBefore) return; // nothing changed, nothing to undo
+  const depth = past.length;
+  useUi.getState().notify(message, {
+    label: 'Undo',
+    run: () => {
+      if (useProject.getState().past.length === depth) {
+        useProject.getState().undo();
+        useUi.getState().notify('Undone ↶');
+      } else useUi.getState().notify('Other changes came after it. Use Ctrl+Z to step back.');
+    },
+  });
+}

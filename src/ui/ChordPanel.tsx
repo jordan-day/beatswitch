@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Note } from 'tonal';
-import { previewChord, previewNote, previewProgression } from '../audio/engine';
+import { ensureAudio, previewChord, previewNote, previewProgression } from '../audio/engine';
 import {
   chordFeel,
   chordFlavors,
@@ -19,8 +19,8 @@ import {
   suggestNext,
 } from '../music/chords';
 import { slotLength } from '../music/patterns';
-import { useProject, useUi } from '../state/project';
-import type { ChordSlot } from '../state/types';
+import { useProject, useUi, withUndo } from '../state/project';
+import { STEPS_PER_BAR, type ChordRhythm, type ChordSlot } from '../state/types';
 import { EditorHeader } from './EditorHeader';
 import { MiniKeyboard } from './MiniKeyboard';
 
@@ -29,13 +29,16 @@ export function ChordPanel() {
   const p = useProject((s) => s.project);
   const setChordCount = useProject((s) => s.setChordCount);
   const { step, selectedSlot, set } = useUi();
+  const viewBar = Math.min(useUi((s) => s.viewBar), p.bars - 1);
   const count = p.chords.slots.length;
+  const perBar = count / p.bars; // chords per bar: 1, 2, 4 or 8
   const activeSlot = step >= 0 ? Math.min(count - 1, Math.floor(step / slotLength(p.bars, count))) : -1;
   const sel = Math.min(selectedSlot, count - 1);
 
   return (
     <>
       <EditorHeader>
+        <RhythmPicker />
         <ProgressionPicker />
         <div className="flex rounded-lg bg-ink-700 p-0.5" title="How many chord changes per loop">
           {([4, 8] as const).map((n) => (
@@ -52,35 +55,151 @@ export function ChordPanel() {
       </EditorHeader>
 
       <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
-        <div className={'grid gap-1.5 mb-2 ' + (count === 8 ? 'grid-cols-4 md:grid-cols-8' : 'grid-cols-2 sm:grid-cols-4')}>
-          {p.chords.slots.map((c, i) => (
-            <button
-              key={i}
-              onClick={() => {
-                set({ selectedSlot: i });
-                if (c) previewChord(c);
-              }}
-              aria-pressed={i === sel}
-              className={
-                'rounded-xl px-2.5 py-1 border-2 text-left transition min-w-0 flex items-baseline gap-2 ' +
-                (i === sel ? 'border-cream-100 ' : activeSlot === i ? 'border-chord ' : 'border-ink-600 ') +
-                (activeSlot === i ? 'bg-chord/20' : 'bg-ink-700/40 hover:bg-ink-700')
-              }
-              title={c ? `${c.symbol}: ${c.notes ? 'custom notes' : chordFeel(c.symbol, p.tonic, p.mood)}` : 'Rest'}
-            >
-              <span className="font-extrabold truncate text-base shrink-0">{c ? c.symbol : '–'}</span>
-              {count === 4 && (
-                <span className="text-[11px] text-cream-500 truncate">
-                  {c ? (c.notes ? '✏️ custom' : chordFeel(c.symbol, p.tonic, p.mood)) : 'rest'}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* one column per bar, with a divider between bars; chords (and custom hits) line up under each bar */}
+        <div className="overflow-x-auto -mx-1 px-1 mb-2">
+          <div className="flex" style={{ minWidth: count * 64 }}>
+            {Array.from({ length: p.bars }, (_, b) => {
+              const first = b * perBar;
+              const playing = step >= 0 && Math.floor(step / STEPS_PER_BAR) === b;
+              return (
+                <div key={b} className={'flex-1 min-w-0 flex flex-col gap-1 ' + (b > 0 ? 'border-l-2 border-ink-600 pl-2 ml-2' : '')}>
+                  <button
+                    className={
+                      'self-start text-[11px] font-bold uppercase tracking-wider rounded px-1 -ml-1 flex items-center gap-1 ' +
+                      (b === viewBar ? 'text-cream-100' : 'text-cream-500 hover:text-cream-100')
+                    }
+                    onClick={() => set({ viewBar: b })}
+                    title={`Bar ${b + 1}`}
+                  >
+                    Bar {b + 1}
+                    {playing && <span className="w-1.5 h-1.5 rounded-full bg-kick" aria-label="playing" />}
+                  </button>
+                  <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${perBar}, minmax(0, 1fr))` }}>
+                    {p.chords.slots.slice(first, first + perBar).map((c, k) => {
+                      const i = first + k;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            set({ selectedSlot: i });
+                            if (c) previewChord(c);
+                          }}
+                          aria-pressed={i === sel}
+                          aria-label={`Chord ${i + 1}: ${c ? c.symbol : 'silent'}`}
+                          className={
+                            'rounded-xl px-2.5 py-1 border-2 text-left transition min-w-0 flex items-baseline gap-2 ' +
+                            (i === sel ? 'border-cream-100 ' : activeSlot === i ? 'border-chord ' : 'border-ink-600 ') +
+                            (activeSlot === i ? 'bg-chord/20' : 'bg-ink-700/40 hover:bg-ink-700')
+                          }
+                          title={c ? `${c.symbol}: ${c.notes ? 'custom notes' : chordFeel(c.symbol, p.tonic, p.mood)}` : 'Silent: no chord plays here'}
+                        >
+                          <span className="font-extrabold truncate text-base shrink-0">{c ? c.symbol : '–'}</span>
+                          {perBar === 1 && (
+                            <span className="text-[11px] text-cream-500 truncate">
+                              {c ? (c.notes ? '✏️ custom' : chordFeel(c.symbol, p.tonic, p.mood)) : 'silent'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {p.chords.rhythm === 'custom' && <ChordHitsBar bar={b} />}
+                </div>
+              );
+            })}
+          </div>
         </div>
+
+        {p.chords.rhythm === 'custom' && <ChordHitsCaption />}
 
         <ChordEditor index={sel} />
       </div>
     </>
+  );
+}
+
+const RHYTHM_LABEL: Record<ChordRhythm, { label: string; hint: string }> = {
+  whole: { label: 'Long', hint: 'Each chord rings out' },
+  half: { label: 'Twice', hint: 'Each chord plays two times' },
+  stab: { label: 'Bouncy', hint: 'Short rhythmic hits' },
+  custom: { label: '✏️ Custom', hint: 'Draw exactly when the chords play' },
+};
+
+/** How the chords are played: ready-made rhythms, or Custom to draw your own hits. */
+function RhythmPicker() {
+  const rhythm = useProject((s) => s.project.chords.rhythm);
+  const setRhythm = useProject((s) => s.setRhythm);
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label="Chord rhythm">
+      <span className="label hidden xl:inline">Rhythm</span>
+      <div className="flex rounded-lg bg-ink-700 p-0.5">
+        {(Object.keys(RHYTHM_LABEL) as ChordRhythm[]).map((r) => (
+          <button
+            key={r}
+            className={
+              'px-2.5 py-1 rounded-md text-xs font-bold transition ' + (rhythm === r ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')
+            }
+            title={RHYTHM_LABEL[r].hint}
+            aria-pressed={rhythm === r}
+            onClick={() => setRhythm(r)}
+          >
+            {RHYTHM_LABEL[r].label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The custom rhythm grid for one bar: a square per 16th note, under that bar's chords.
+ * A hit plays the chord of that moment and lets it ring until the next hit (or the next chord).
+ */
+function ChordHitsBar({ bar }: { bar: number }) {
+  const p = useProject((s) => s.project);
+  const toggleChordStep = useProject((s) => s.toggleChordStep);
+  const step = useUi((s) => s.step);
+  const len = slotLength(p.bars, p.chords.slots.length);
+  return (
+    <div className="grid gap-px h-7" style={{ gridTemplateColumns: `repeat(${STEPS_PER_BAR}, minmax(0, 1fr))` }}>
+      {Array.from({ length: STEPS_PER_BAR }, (_, k) => {
+        const i = bar * STEPS_PER_BAR + k;
+        const on = p.chords.steps[i];
+        return (
+          <button
+            key={i}
+            onClick={() => {
+              ensureAudio();
+              toggleChordStep(i);
+            }}
+            aria-label={`Chord hit, bar ${bar + 1} step ${k + 1}${on ? ' on' : ''}`}
+            aria-pressed={on}
+            className={
+              'cell rounded-[3px] ' +
+              (on ? 'bg-chord ' : k % 4 === 0 ? 'bg-ink-600 ' : 'bg-ink-700 ') +
+              (i % len === 0 && k > 0 ? 'ml-1 ' : '') + // a gap where the next chord starts inside the bar
+              (step === i ? 'ring-2 ring-cream-100' : '')
+            }
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function ChordHitsCaption() {
+  const clearRow = useProject((s) => s.clearRow);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 -mt-1 mb-2">
+      <span className="label">↑ Chord hits</span>
+      <span className="text-[11px] text-cream-500">Click squares to choose when the chords play. Each hit rings until the next one.</span>
+      <button
+        className="text-[11px] text-cream-500 hover:text-cream-100 ml-auto rounded"
+        onClick={() => withUndo('Chord hits cleared', () => clearRow('chords'))}
+      >
+        ✕ Clear hits
+      </button>
+    </div>
   );
 }
 
@@ -109,19 +228,24 @@ function ProgressionPicker() {
         ✨ Progressions ▾
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 z-30 card p-2 w-80 flex flex-col gap-1">
+        <div className="absolute right-0 top-full mt-2 z-30 card !bg-ink-800 shadow-2xl p-2 w-[min(20rem,calc(100vw-2rem))] flex flex-col gap-1">
           <div className="label px-2 py-1">
             {MOOD_INFO[p.mood].emoji} {MOOD_INFO[p.mood].label} progressions in {keyLabel(p.tonic, p.mood)}
           </div>
           {PROGRESSIONS[p.mood].map((pr) => {
             const chords = progressionChords(p.tonic, pr);
-            const selected = p.chords.slots.length === 4 && p.chords.slots.every((s, i) => s && !s.notes && s.symbol === chords[i]);
+            const per = p.chords.slots.length / chords.length;
+            const selected = p.chords.slots.every((s, i) => s && !s.notes && s.symbol === chords[Math.floor(i / per)]);
             return (
               <div key={pr.name} className={'flex items-center gap-2 rounded-lg px-2 py-1.5 ' + (selected ? 'bg-chord/20' : 'hover:bg-ink-700')}>
                 <button
                   className="flex-1 text-left"
                   onClick={() => {
-                    update((d) => void (d.chords.slots = chords.map((symbol) => ({ symbol }))));
+                    // keep the chord count you chose: with 8 chords, each one plays twice
+                    update((d) => {
+                      const per = d.chords.slots.length / chords.length;
+                      d.chords.slots = chords.flatMap((symbol) => Array.from({ length: per }, () => ({ symbol })));
+                    });
                     setOpen(false);
                   }}
                 >
@@ -195,7 +319,7 @@ function ChordEditor({ index }: { index: number }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="flex items-baseline gap-2 min-w-0">
             <span className="label shrink-0">Chord {index + 1}</span>
-            <span className="text-xl font-black leading-tight">{slot ? slot.symbol : 'Rest'}</span>
+            <span className="text-xl font-black leading-tight">{slot ? slot.symbol : 'Silent'}</span>
             <span className="text-xs text-cream-500 truncate">
               {slot ? `feels: ${chordFeel(slot.symbol, p.tonic, p.mood)}` : 'nothing plays here: pick a chord'}
             </span>
@@ -205,8 +329,12 @@ function ChordEditor({ index }: { index: number }) {
               <button className="btn text-xs" onClick={() => previewChord(slot)}>
                 ▶ Hear it
               </button>
-              <button className="btn text-xs" onClick={() => setSlot(index, null)} title="Make this chord silent">
-                Rest
+              <button
+                className="btn text-xs"
+                onClick={() => withUndo(`Chord ${index + 1} is now silent`, () => setSlot(index, null))}
+                title="No chord plays here (a rest)"
+              >
+                🔇 Silence
               </button>
             </div>
           )}

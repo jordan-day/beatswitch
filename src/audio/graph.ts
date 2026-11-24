@@ -15,6 +15,7 @@ import {
   type SampledInstrument,
 } from '../state/types';
 import { getInstrument, getKitBuffer, kitSamplePath, loadBuiltins } from './builtinSamples';
+import { buildTimeline, FADE_IN_BARS, FADE_OUT_BARS, locate, type Part } from '../state/song';
 
 const toDb = (v: number) => (v <= 0.001 ? -Infinity : Tone.gainToDb(v));
 
@@ -88,6 +89,8 @@ export class Graph {
   private comp = new Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.01, release: 0.2 });
   private limiter = new Tone.Limiter(-1.5);
   private master = new Tone.Volume(-4);
+  /** Song-level volume, for fade in / fade out. */
+  private songGain = new Tone.Gain(1);
   private wobble = new Tone.Vibrato({ frequency: 0.6, depth: 0.1, wet: 1 });
   private crackle: Tone.Player;
   private crackleGain = new Tone.Gain(0);
@@ -109,7 +112,7 @@ export class Graph {
     // master chain: input -> [dry | crushed] -> lowpass -> reverb -> comp -> limiter -> out
     this.input.connect(this.crushMix.a);
     this.input.chain(this.crushShaper, this.crushMix.b);
-    this.crushMix.chain(this.filter, this.reverb, this.comp, this.limiter, this.master, Tone.getDestination());
+    this.crushMix.chain(this.filter, this.reverb, this.comp, this.limiter, this.master, this.songGain, Tone.getDestination());
 
     // crackle sits on top of the mix, after the crusher/filter/reverb
     this.crackle = new Tone.Player({ url: makeCrackleBuffer(4, Tone.getContext().sampleRate), loop: true });
@@ -198,23 +201,40 @@ export class Graph {
     this.crushMix.fade.rampTo(Math.min(1, fx.crunch * 3), 0.05);
   }
 
-  /** Schedule everything that happens at `step` (0..bars*16-1) at audio time `time`. */
-  scheduleStep(step: number, time: number, p: Project) {
+  /**
+   * Schedule everything that happens at `step` (0..bars*16-1) at audio time `time`.
+   * In a song, `opts.mute` silences parts for this block and `opts.fill` swaps in a drum fill.
+   */
+  scheduleStep(step: number, time: number, p: Project, opts: { mute?: Record<Part, boolean>; fill?: boolean } = {}) {
     const sd = stepSeconds(p.bpm);
+    const mute = opts.mute;
+    const total = p.bars * STEPS_PER_BAR;
 
-    for (const row of DRUM_ROWS) {
-      const s = p.drums[row].steps[step];
-      // Little bit of human feel: random velocity wobble.
-      if (s) this.drums[row]?.voice.trigger(time, (s === 2 ? 1 : 0.68) * (0.92 + Math.random() * 0.08));
+    if (!mute?.drums) {
+      if (opts.fill) {
+        // Drum fill on the last beat: snare on every 16th, getting louder, kick on the first.
+        // Hats keep going so the groove doesn't drop out.
+        const k = step - (total - 4); // 0..3
+        this.drums.snare?.voice.trigger(time, 0.45 + k * 0.18);
+        if (k === 0) this.drums.kick?.voice.trigger(time, 0.9);
+        if (k === 3) this.drums.openhat?.voice.trigger(time, 0.7);
+        const hat = p.drums.hat.steps[step];
+        if (hat) this.drums.hat?.voice.trigger(time, hat === 2 ? 0.9 : 0.6);
+      } else {
+        for (const row of DRUM_ROWS) {
+          const s = p.drums[row].steps[step];
+          // Little bit of human feel: random velocity wobble.
+          if (s) this.drums[row]?.voice.trigger(time, (s === 2 ? 1 : 0.68) * (0.92 + Math.random() * 0.08));
+        }
+      }
     }
 
-    const total = p.bars * STEPS_PER_BAR;
     const len = slotLength(p.bars, p.chords.slots.length);
     const slotIdx = Math.min(p.chords.slots.length - 1, Math.floor(step / len));
     const within = step - slotIdx * len;
     const chord = p.chords.slots[slotIdx];
 
-    if (chord && this.keys) {
+    if (chord && this.keys && !mute?.chords) {
       let hitLen = 0;
       if (p.chords.rhythm === 'custom') {
         if (p.chords.steps[step]) {
@@ -234,7 +254,7 @@ export class Graph {
     }
 
     const bassMode = p.bass.steps[step];
-    if (p.bass.enabled && bassMode && chord && this.bass) {
+    if (p.bass.enabled && bassMode && chord && this.bass && !mute?.bass) {
       const note = bassNote(chord, bassMode as 1 | 2 | 3);
       if (note) {
         // hold until the next bass hit (max half a bar, or end of chord slot)
@@ -244,7 +264,7 @@ export class Graph {
       }
     }
 
-    if (this.melody) {
+    if (this.melody && !mute?.melody) {
       for (const m of p.melody.notes) {
         if (m.s !== step || m.d >= MELODY_ROWS) continue;
         const note = degreeNote(p.tonic, p.mood, p.melody.octave, m.d);
@@ -268,6 +288,38 @@ export class Graph {
     v?.voice.play([note], dur, Tone.now(), 0.75);
   }
 
+  /**
+   * Play step `step` of the whole song (the arrangement) at `time`.
+   * Returns where it fell, or null past the end of the song.
+   */
+  scheduleSongStep(step: number, time: number, p: Project) {
+    const at = locate(buildTimeline(p), step);
+    if (!at) return null;
+    this.scheduleStep(at.local, time, at.seg.view, { mute: at.seg.block.mute, fill: at.fillNow });
+    return at;
+  }
+
+  /** Song fades: set up from `start` (audio time) for a song of `seconds` length. */
+  scheduleFades(p: Project, start: number, seconds: number) {
+    const g = this.songGain.gain;
+    const bar = stepSeconds(p.bpm) * STEPS_PER_BAR;
+    g.cancelScheduledValues(start);
+    g.setValueAtTime(p.fadeIn ? 0 : 1, start);
+    if (p.fadeIn) g.linearRampToValueAtTime(1, start + Math.min(FADE_IN_BARS * bar, seconds / 3));
+    if (p.fadeOut) {
+      const len = Math.min(FADE_OUT_BARS * bar, seconds / 3);
+      g.setValueAtTime(1, start + seconds - len);
+      g.linearRampToValueAtTime(0, start + seconds);
+    }
+  }
+
+  /** Back to full volume right away (stopping or switching to section playback). */
+  resetFades() {
+    const g = this.songGain.gain;
+    g.cancelScheduledValues(0);
+    g.value = 1;
+  }
+
   silence() {
     this.keys?.voice.releaseAll();
     this.melody?.voice.releaseAll();
@@ -282,7 +334,7 @@ export class Graph {
     this.keys?.voice.dispose();
     this.melody?.voice.dispose();
     this.bass?.dispose();
-    [this.input, this.crushShaper, this.crushMix, this.filter, this.reverb, this.comp, this.limiter, this.master,
+    [this.input, this.crushShaper, this.crushMix, this.filter, this.reverb, this.comp, this.limiter, this.master, this.songGain,
       this.wobble, this.crackle, this.crackleGain, this.keysVol, this.melodyVol, this.bassVol].forEach((n) => n.dispose());
   }
 }

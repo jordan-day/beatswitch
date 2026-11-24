@@ -27,6 +27,22 @@ export function encodeProject(p: Project): { hash: string; replacedSamples: numb
     bass: { ...copy.bass, steps: copy.bass.steps.slice(0, used) },
     chords: { ...copy.chords, steps: copy.chords.steps.slice(0, used).map((b) => (b ? 1 : 0)) },
     melody: { ...copy.melody, notes: copy.melody.notes.filter((n) => n.s < used) },
+    // other sections: the same trimming, to the bars each one uses
+    sections: copy.sections.map((s) => {
+      if (!s.patterns) return s;
+      const n = s.patterns.bars * 16;
+      const pt = s.patterns;
+      return {
+        ...s,
+        patterns: {
+          ...pt,
+          drums: Object.fromEntries(DRUM_ROWS.map((r) => [r, pt.drums[r].slice(0, n)])),
+          bass: pt.bass.slice(0, n),
+          chords: { ...pt.chords, steps: pt.chords.steps.slice(0, n).map((b) => (b ? 1 : 0)), hidden8: undefined },
+          melody: pt.melody.filter((m) => m.s < n),
+        },
+      };
+    }),
   };
   return { hash: PREFIX + LZString.compressToEncodedURIComponent(JSON.stringify(compact)), replacedSamples };
 }

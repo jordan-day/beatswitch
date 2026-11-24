@@ -5,10 +5,12 @@ import { decodeProject } from './storage/share';
 import { ChordPanel } from './ui/ChordPanel';
 import { useSamples } from './ui/common';
 import { DrumGrid } from './ui/DrumGrid';
+import { ErrorBoundary } from './ui/ErrorBoundary';
 import { Inspector } from './ui/Inspector';
 import { MelodyRoll } from './ui/MelodyRoll';
 import { Overview } from './ui/Overview';
 import { ProjectMenu } from './ui/ProjectMenu';
+import { SongEditor } from './ui/SongEditor';
 import { Transport } from './ui/Transport';
 
 const TOUR_KEY = 'beatswitch:tour-done';
@@ -37,8 +39,8 @@ function HelpOverlay() {
   const close = closeHelp;
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
-    ['🗺️', 'See the whole song', 'The strip at the top shows every part of your loop. Click a part to edit it.'],
-    ['🥁', 'Edit in the big panel', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
+    ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
+    ['🎼', 'Build a song', 'Open 🎼 Song (above the editor) to add sections (Intro, Verse, Chorus…) and line them up. Switch Play to "Song" to hear it all.'],
     ['📼', 'Set the vibe', 'On the right: pick a mood and key, and turn up the Lo-fi knob.'],
   ];
   return (
@@ -67,7 +69,7 @@ function HelpOverlay() {
           ))}
         </ol>
         <div className="text-xs text-cream-500 mt-4">
-          Shortcuts: <b>Space</b> play/stop · <b>1 2 3</b> switch editor · <b>Ctrl+Z</b> undo. Everything saves in this browser automatically.
+          Shortcuts: <b>Space</b> play/stop · <b>1 2 3</b> beat/chords/melody · <b>4</b> song · <b>Ctrl+Z</b> undo. Everything saves in this browser automatically.
         </div>
         <button className="btn-primary mt-4 w-full" onClick={close} autoFocus>
           Let's go
@@ -82,7 +84,8 @@ function Toast() {
   const set = useUi((s) => s.set);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => set({ toast: null }), 4500);
+    // toasts with an Undo stay a little longer, so there's time to reach the button
+    const t = setTimeout(() => set({ toast: null }), toast.action ? 7000 : 4500);
     return () => clearTimeout(t);
   }, [toast, set]);
   if (!toast) return null;
@@ -90,9 +93,22 @@ function Toast() {
     <div
       key={toast.id}
       role="status"
-      className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 max-w-md rounded-xl bg-cream-100 text-ink-950 font-bold px-4 py-3 shadow-2xl text-sm"
+      className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-cream-100 text-ink-950 font-bold pl-4 pr-2 py-2 shadow-2xl text-sm flex items-center gap-3 min-h-[44px]"
     >
-      {toast.text}
+      <span className="flex-1">{toast.text}</span>
+      {toast.action && (
+        <button
+          className="rounded-lg px-3 py-1.5 bg-ink-900 text-cream-100 hover:bg-ink-700 font-extrabold"
+          onClick={() => {
+            toast.action!.run();
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
+      <button className="px-2 text-ink-600 hover:text-ink-950" onClick={() => set({ toast: null })} aria-label="Dismiss">
+        ✕
+      </button>
     </div>
   );
 }
@@ -114,13 +130,51 @@ function FloatingPlay() {
   );
 }
 
+/**
+ * The two levels of the app: editing one section (its overview + Beat/Chords/Melody editors),
+ * or arranging sections into the whole song.
+ */
+function ViewTabs() {
+  const view = useUi((s) => s.view);
+  const set = useUi((s) => s.set);
+  const p = useProject((s) => s.project);
+  const section = p.sections.find((s) => s.id === p.activeSection)?.name ?? 'Section';
+  const blocks = p.song.length;
+  const tab = (active: boolean) =>
+    'flex items-center gap-2 px-3.5 py-1 rounded-xl text-[13px] font-extrabold transition ' +
+    (active ? 'bg-ink-800 text-cream-100 border border-ink-600 shadow' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-800/60');
+  return (
+    <div role="tablist" aria-label="View" className="flex gap-1 shrink-0">
+      <button role="tab" aria-selected={view === 'section'} className={tab(view === 'section')} onClick={() => set({ view: 'section' })}>
+        🎛 Section
+        <span className="text-xs font-bold text-cream-500 normal-case">· {section}</span>
+      </button>
+      <button
+        role="tab"
+        aria-selected={view === 'song'}
+        className={tab(view === 'song')}
+        onClick={() => set({ view: 'song' })}
+        title="Line up your sections into a full song (key 4)"
+      >
+        🎼 Song
+        <span className="text-xs font-bold text-cream-500">
+          · {p.sections.length} section{p.sections.length > 1 ? 's' : ''}, {blocks} block{blocks === 1 ? '' : 's'}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function Editor() {
   const track = useUi((s) => s.track);
   return (
     <section className="card p-3 sm:p-4 flex flex-col min-h-0 lg:flex-1" aria-label="Editor">
-      {track === 'beat' && <DrumGrid />}
-      {track === 'chords' && <ChordPanel />}
-      {track === 'melody' && <MelodyRoll />}
+      {/* keyed by tab, so switching tabs also clears a crashed editor */}
+      <ErrorBoundary key={track} name={`${{ beat: 'Beat', chords: 'Chords', melody: 'Melody' }[track]} editor`}>
+        {track === 'beat' && <DrumGrid />}
+        {track === 'chords' && <ChordPanel />}
+        {track === 'melody' && <MelodyRoll />}
+      </ErrorBoundary>
     </section>
   );
 }
@@ -139,7 +193,9 @@ export default function App() {
     useSamples.getState().refresh();
   }, []);
 
-  // Keyboard: Space = play/stop, 1/2/3 = editors, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
+  const view = useUi((s) => s.view);
+
+  // Keyboard: Space = play/stop, 1/2/3 = section editors, 4 = song, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
@@ -152,7 +208,9 @@ export default function App() {
         e.preventDefault();
         togglePlay();
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && TRACK_KEYS[e.key]) {
-        ui.set({ track: TRACK_KEYS[e.key] });
+        ui.set({ view: 'section', track: TRACK_KEYS[e.key] });
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '4') {
+        ui.set({ view: 'song' });
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? useProject.getState().redo() : useProject.getState().undo();
@@ -182,11 +240,24 @@ export default function App() {
       </header>
 
       <div className="flex-1 min-h-0 grid lg:grid-cols-[minmax(0,1fr)_272px] gap-3">
-        <main className="flex flex-col gap-3 min-h-0 min-w-0">
-          <Overview />
-          <Editor />
+        <main className="flex flex-col gap-2 min-h-0 min-w-0">
+          <ViewTabs />
+          {view === 'song' ? (
+            <ErrorBoundary name="song arrangement">
+              <SongEditor />
+            </ErrorBoundary>
+          ) : (
+            <>
+              <ErrorBoundary name="section overview">
+                <Overview />
+              </ErrorBoundary>
+              <Editor />
+            </>
+          )}
         </main>
-        <Inspector />
+        <ErrorBoundary name="settings panel">
+          <Inspector />
+        </ErrorBoundary>
       </div>
 
       <FloatingPlay />

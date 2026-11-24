@@ -1,3 +1,4 @@
+import { defaultSong, newId, noMutes, type Part, type SongBlock } from '../state/song';
 import type { BassStep, MelodyNote, Mood, Project, SynthKit } from '../state/types';
 import { MAX_STEPS } from '../state/types';
 import { PROGRESSIONS, progressionChords } from './chords';
@@ -126,6 +127,35 @@ export function buildPreset(index: number): Project {
     bass: { enabled: true, sound: 'round', steps: parseBass(p.bass), volume: 0.7 },
     melody: { sound: p.melodySound ?? 'musicbox', octave: 4, notes: melody, volume: 0.6, mute: false },
     fx: { lofi: p.lofi, ...lofiMacro(p.lofi) },
+    ...demoSong(),
+  };
+}
+
+/**
+ * Starter beats come as a short song made from their one section, using block mutes:
+ * chords-only intro, the full loop, a breakdown without drums, the loop again with a fill, outro.
+ */
+function demoSong(): Pick<Project, 'sections' | 'activeSection' | 'song' | 'fadeIn' | 'fadeOut'> {
+  const id = newId();
+  const block = (repeats: number, mute: Partial<Record<Part, boolean>> = {}, fill = false): SongBlock => ({
+    id: newId(),
+    section: id,
+    repeats,
+    mute: { ...noMutes(), ...mute },
+    fill,
+  });
+  return {
+    sections: [{ id, name: 'Main' }],
+    activeSection: id,
+    song: [
+      block(1, { drums: true, bass: true, melody: true }), // intro: just the chords
+      block(2, {}, true),
+      block(1, { drums: true }), // breakdown
+      block(2, {}, true),
+      block(1, { drums: true, bass: true }), // outro
+    ],
+    fadeIn: true,
+    fadeOut: true,
   };
 }
 
@@ -140,5 +170,7 @@ export function emptyProject(withChords = true): Project {
   p.bass.steps = p.bass.steps.map(() => 0);
   p.melody.notes = [];
   if (!withChords) p.chords.slots = p.chords.slots.map(() => null);
+  // a blank beat gets a plain one-section song (one block, 4 repeats)
+  Object.assign(p, defaultSong());
   return p;
 }

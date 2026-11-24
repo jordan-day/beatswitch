@@ -42,12 +42,18 @@ export function chordHits(rhythm: Exclude<ChordRhythm, 'custom'>, len: number): 
   return offs.map((offset) => ({ offset, length: Math.max(1, Math.round(len / 8)) }));
 }
 
-/** When the loop grows, copy the existing bars into the new ones so the beat keeps going. */
+/**
+ * When the loop grows. Shortening a loop only hides the later bars, so if the bars coming back
+ * still hold anything, they return exactly as they were. If they're empty, the existing bars are
+ * repeated into them so the beat keeps going.
+ */
 export function extendSteps<T>(steps: T[], oldBars: number, newBars: number): T[] {
   if (newBars <= oldBars) return steps.slice();
-  const out = steps.slice();
   const oldLen = oldBars * STEPS_PER_BAR;
-  for (let i = oldLen; i < newBars * STEPS_PER_BAR; i++) out[i] = steps[i % oldLen];
+  const newLen = newBars * STEPS_PER_BAR;
+  if (steps.slice(oldLen, newLen).some(Boolean)) return steps.slice();
+  const out = steps.slice();
+  for (let i = oldLen; i < newLen; i++) out[i] = steps[i % oldLen];
   return out;
 }
 
@@ -59,13 +65,18 @@ export function rhythmToSteps(rhythm: Exclude<ChordRhythm, 'custom'>, bars: numb
   return extendSteps(out, bars, MAX_BARS);
 }
 
-/** Repeat melody notes from the first `oldBars` into new bars when the loop grows. */
+/**
+ * Melody version of {@link extendSteps}: notes in the bars coming back are kept as they were;
+ * only if those bars are empty is the existing melody repeated into them. Never drops a note.
+ */
 export function extendMelody<T extends { s: number }>(notes: T[], oldBars: number, newBars: number): T[] {
   if (newBars <= oldBars) return notes.slice();
   const oldLen = oldBars * STEPS_PER_BAR;
+  const newLen = newBars * STEPS_PER_BAR;
+  if (notes.some((n) => n.s >= oldLen && n.s < newLen)) return notes.slice();
   const base = notes.filter((n) => n.s < oldLen);
-  const out = base.slice();
-  for (let off = oldLen; off < newBars * STEPS_PER_BAR; off += oldLen) out.push(...base.map((n) => ({ ...n, s: n.s + off })));
+  const out = notes.slice();
+  for (let off = oldLen; off < newLen; off += oldLen) out.push(...base.map((n) => ({ ...n, s: n.s + off })));
   return out;
 }
 

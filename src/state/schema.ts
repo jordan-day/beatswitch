@@ -17,6 +17,7 @@ import {
   type Step,
 } from './types';
 import { TONICS } from '../music/chords';
+import { extractPatterns, MAX_REPEATS, newId, PARTS, type Part, type Section, type SectionPatterns } from './song';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const num = (v: unknown, lo: number, hi: number, dflt: number) =>
@@ -73,6 +74,11 @@ export function parseProject(data: unknown): Project | null {
     bass: base.bass,
     melody: base.melody,
     fx: base.fx,
+    sections: base.sections,
+    activeSection: base.activeSection,
+    song: base.song,
+    fadeIn: base.fadeIn,
+    fadeOut: base.fadeOut,
   };
   for (const row of DRUM_ROWS) {
     const d = data.drums[row];
@@ -137,5 +143,61 @@ export function parseProject(data: unknown): Project | null {
       space: num(f.space, 0, 1, base.fx.space),
     };
   }
+  parseSong(data, p);
   return p;
+}
+
+const ID_RE = /^[a-z0-9]{1,16}$/i;
+
+/** One stored section's patterns, validated by running them through the project parser. */
+function parsePatterns(raw: unknown): SectionPatterns | undefined {
+  if (!isObj(raw) || !isObj(raw.drums)) return undefined;
+  const drums = raw.drums as Record<string, unknown>;
+  const asProject = {
+    version: 1,
+    bars: raw.bars,
+    drums: Object.fromEntries(DRUM_ROWS.map((r) => [r, { steps: drums[r] }])),
+    bass: { steps: raw.bass },
+    chords: raw.chords,
+    melody: { notes: raw.melody },
+  };
+  const parsed = parseProject(asProject);
+  return parsed ? extractPatterns(parsed) : undefined;
+}
+
+/**
+ * The song arrangement. Projects saved before songs existed (no `sections`) keep the default:
+ * their one loop becomes a single section played 4 times.
+ */
+function parseSong(data: Record<string, unknown>, p: Project) {
+  if (!Array.isArray(data.sections) || !data.sections.length) return;
+  const sections: Section[] = [];
+  for (const s of data.sections.slice(0, 16)) {
+    if (!isObj(s) || typeof s.id !== 'string' || !ID_RE.test(s.id) || sections.some((x) => x.id === s.id)) continue;
+    const name = typeof s.name === 'string' && s.name.trim() ? s.name.trim().slice(0, 24) : 'Section';
+    sections.push({ id: s.id, name, patterns: parsePatterns(s.patterns) });
+  }
+  const active = sections.find((s) => s.id === data.activeSection) ?? sections[0];
+  if (!active) return;
+  // every section except the active one must carry its own patterns
+  const valid = sections.filter((s) => s === active || s.patterns);
+  delete active.patterns; // the active section's patterns are the top-level fields
+  p.sections = valid;
+  p.activeSection = active.id;
+  p.song = (Array.isArray(data.song) ? data.song : [])
+    .slice(0, 64)
+    .filter(isObj)
+    .filter((b) => typeof b.section === 'string' && valid.some((s) => s.id === b.section))
+    .map((b) => {
+      const mute = isObj(b.mute) ? b.mute : {};
+      return {
+        id: typeof b.id === 'string' && ID_RE.test(b.id) ? b.id : newId(),
+        section: b.section as string,
+        repeats: Math.round(num(b.repeats, 1, MAX_REPEATS, 1)),
+        mute: Object.fromEntries(PARTS.map((part) => [part, mute[part] === true])) as Record<Part, boolean>,
+        fill: b.fill === true,
+      };
+    });
+  p.fadeIn = data.fadeIn === true;
+  p.fadeOut = data.fadeOut !== false;
 }

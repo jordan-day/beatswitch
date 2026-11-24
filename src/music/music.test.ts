@@ -75,11 +75,16 @@ describe('patterns', () => {
     expect(chordHits('stab', 16).map((h) => h.offset)).toEqual([0, 6, 10]);
   });
 
-  it('copies existing bars when the loop grows', () => {
-    const s = Array.from({ length: 64 }, (_, i) => (i < 16 ? i : -1));
+  it('repeats existing bars into empty ones when the loop grows', () => {
+    const s = Array.from({ length: 64 }, (_, i) => (i < 16 ? i % 3 : 0));
     const out = extendSteps(s, 1, 4);
-    expect(out[16]).toBe(0);
-    expect(out[63]).toBe(15);
+    expect(out.slice(16, 32)).toEqual(s.slice(0, 16));
+    expect(out.slice(48, 64)).toEqual(s.slice(0, 16));
+  });
+
+  it('brings hidden bars back untouched when they still have something in them', () => {
+    const s = Array.from({ length: 64 }, (_, i) => (i === 40 ? 2 : 0));
+    expect(extendSteps(s, 1, 4)).toEqual(s);
   });
 
   it('the lo-fi knob moves every effect within 0..1', () => {

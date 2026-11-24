@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { ensureAudio } from '../audio/engine';
-import { useProject, useUi } from '../state/project';
+import { useProject, useUi, withUndo } from '../state/project';
 import { DRUM_ROWS, STEPS_PER_BAR, SYNTH_KITS, type DrumRow, type SynthKit } from '../state/types';
 import { useSamples } from './common';
 import { EditorHeader } from './EditorHeader';
@@ -41,14 +41,21 @@ export function DrumGrid() {
   const offset = bar * STEPS_PER_BAR;
 
   const copyToAll = () =>
-    useProject.getState().update((p) => {
+    withUndo(`Copied bar ${bar + 1} into every bar`, () => useProject.getState().update((p) => {
       for (const r of DRUM_ROWS) {
         const src = p.drums[r].steps.slice(offset, offset + STEPS_PER_BAR);
         for (let b = 0; b < p.bars; b++) for (let i = 0; i < STEPS_PER_BAR; i++) p.drums[r].steps[b * STEPS_PER_BAR + i] = src[i];
       }
       const bsrc = p.bass.steps.slice(offset, offset + STEPS_PER_BAR);
       for (let b = 0; b < p.bars; b++) for (let i = 0; i < STEPS_PER_BAR; i++) p.bass.steps[b * STEPS_PER_BAR + i] = bsrc[i];
-    });
+      // the custom chord-hit row is shown in this grid too, so it gets copied with the rest
+      if (p.chords.rhythm === 'custom') {
+        const csrc = p.chords.steps.slice(offset, offset + STEPS_PER_BAR);
+        for (let b = 0; b < p.bars; b++) for (let i = 0; i < STEPS_PER_BAR; i++) p.chords.steps[b * STEPS_PER_BAR + i] = csrc[i];
+      }
+    }));
+
+  const clear = (row: RowId) => withUndo(`Cleared ${ROW_INFO[row].label.toLowerCase()}`, () => clearRow(row));
 
   return (
     <>
@@ -58,14 +65,19 @@ export function DrumGrid() {
             ⧉ Copy bar to all
           </button>
         )}
-        <button className="btn text-xs" onClick={randomize} title="Make a random (but musical) drum pattern">
+        <button
+          className="btn text-xs"
+          onClick={() => withUndo('New drum pattern 🎲', randomize)}
+          title="Make a random (but musical) drum pattern"
+        >
           🎲 Surprise me
         </button>
       </EditorHeader>
 
       {/* rows stretch to fill the editor on tall screens and shrink (to a minimum) on short ones */}
       <div className="overflow-auto -mx-1 px-1 flex-1 min-h-0">
-        <div className="min-w-[720px] h-full flex flex-col gap-1.5">
+        <div className="min-w-[520px] sm:min-w-[720px] h-full flex flex-col gap-1.5">
+          <BeatRuler bar={bar} playStep={playStep - offset} />
           {DRUM_ROWS.map((row) => (
             <Row
               key={row}
@@ -76,7 +88,7 @@ export function DrumGrid() {
                 ensureAudio();
                 toggleStep(row, offset + i);
               }}
-              onClear={() => clearRow(row)}
+              onClear={() => clear(row)}
             />
           ))}
           <div className="border-t border-ink-600/60 shrink-0" />
@@ -89,7 +101,7 @@ export function DrumGrid() {
               ensureAudio();
               toggleBass(offset + i);
             }}
-            onClear={() => clearRow('bass')}
+            onClear={() => clear('bass')}
           />
           {project.chords.rhythm === 'custom' && (
             <Row
@@ -100,7 +112,7 @@ export function DrumGrid() {
                 ensureAudio();
                 toggleChordStep(offset + i);
               }}
-              onClear={() => clearRow('chords')}
+              onClear={() => clear('chords')}
             />
           )}
           <p className="text-xs text-cream-500 mt-1 shrink-0 sticky left-0 max-w-[calc(100vw-3.5rem)]">
@@ -137,7 +149,8 @@ function Row(props: {
     <div className="flex items-stretch gap-2 flex-1 min-h-[28px] max-h-[60px]">
       <div
         className={
-          'w-48 shrink-0 flex items-center gap-2 rounded-xl px-2 transition ' +
+          // narrower on phones so more of the grid fits; the volume slider hides there too
+          'w-36 sm:w-48 shrink-0 flex flex-col justify-center rounded-xl px-2 transition ' +
           (drag ? 'bg-ink-600 ring-2 ring-kick' : '')
         }
         onDragOver={(e) => {
@@ -154,15 +167,18 @@ function Row(props: {
         }}
         title={info.hint}
       >
-        <span className={'w-2.5 h-2.5 rounded-full shrink-0 ' + info.bg} />
-        <div className="flex flex-col min-w-0 flex-1">
-          <span className="font-bold text-sm leading-tight">{info.label}</span>
+        {/* line 1: name, mute, volume */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={'w-2.5 h-2.5 rounded-full shrink-0 ' + info.bg} />
+          <span className="font-bold text-sm leading-tight flex-1 truncate">{info.label}</span>
+          {props.row !== 'chords' && <RowMixer row={props.row as DrumRow | 'bass'} />}
+        </div>
+        {/* line 2: which sound */}
+        <div className="pl-4 min-w-0">
           {isDrum ? (
-            <RowSettings row={props.row as DrumRow} onPickFile={assign} />
-          ) : props.row === 'bass' ? (
-            <BassSettings />
+            <KitSelect row={props.row as DrumRow} onPickFile={assign} />
           ) : (
-            <span className="text-xs text-cream-500">custom rhythm</span>
+            <span className="text-xs text-cream-500">{props.row === 'bass' ? 'follows the chords' : 'custom chord rhythm'}</span>
           )}
         </div>
       </div>
@@ -191,14 +207,87 @@ function Row(props: {
         })}
       </div>
 
-      <button className="text-cream-500 hover:text-cream-100 text-xs px-1" onClick={props.onClear} title={`Clear ${info.label}`}>
+      <button
+        className="w-6 shrink-0 text-cream-500 hover:text-cream-100 text-xs rounded"
+        onClick={props.onClear}
+        title={`Clear ${info.label} (all bars)`}
+        aria-label={`Clear ${info.label}`}
+      >
         ✕
       </button>
     </div>
   );
 }
 
-function RowSettings({ row, onPickFile }: { row: DrumRow; onPickFile: (f: File) => void }) {
+/** Beat numbers above the grid (1 2 3 4 of the bar shown), so you can count along. */
+function BeatRuler({ bar, playStep }: { bar: number; playStep: number }) {
+  return (
+    <div className="flex items-end gap-2 shrink-0 h-4" aria-hidden="true">
+      <div className="w-36 sm:w-48 shrink-0 text-[10px] font-bold text-cream-500 pl-2 uppercase tracking-wider">Bar {bar + 1}</div>
+      <div className="grid gap-1 flex-1" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
+        {Array.from({ length: 16 }, (_, i) => (
+          <div
+            key={i}
+            className={
+              'text-center leading-none ' +
+              (i % 4 === 0 ? 'text-[11px] font-extrabold ' : 'text-[9px] ') +
+              (Math.floor(playStep / 4) === Math.floor(i / 4) && playStep >= 0 ? 'text-cream-100' : 'text-cream-500')
+            }
+          >
+            {i % 4 === 0 ? i / 4 + 1 : '·'}
+          </div>
+        ))}
+      </div>
+      <div className="w-6 shrink-0" />
+    </div>
+  );
+}
+
+/** Mute and volume for a row (volume hides on phones to give the grid room). */
+function RowMixer({ row }: { row: DrumRow | 'bass' }) {
+  const p = useProject((s) => s.project);
+  const update = useProject((s) => s.update);
+  const muted = row === 'bass' ? !p.bass.enabled : p.drums[row].mute;
+  const volume = row === 'bass' ? p.bass.volume : p.drums[row].volume;
+  const name = ROW_INFO[row].label;
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <button
+        className={'w-6 h-6 grid place-items-center rounded-md text-xs ' + (muted ? 'bg-kick text-ink-950' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-600')}
+        onClick={() =>
+          update((d) => {
+            if (row === 'bass') d.bass.enabled = !d.bass.enabled;
+            else d.drums[row].mute = !d.drums[row].mute;
+          })
+        }
+        title={muted ? `Unmute ${name}` : `Mute ${name}`}
+        aria-label={muted ? `Unmute ${name}` : `Mute ${name}`}
+        aria-pressed={muted}
+      >
+        {muted ? '🔇' : '🔈'}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={volume}
+        className="hidden sm:block w-12 !h-4"
+        title={`${name} volume`}
+        aria-label={`${name} volume`}
+        onChange={(e) =>
+          update((d) => {
+            if (row === 'bass') d.bass.volume = Number(e.target.value);
+            else d.drums[row].volume = Number(e.target.value);
+          }, 'vol:' + row)
+        }
+      />
+    </div>
+  );
+}
+
+/** Which sound a drum row plays: built-in kits, recorded hits, your imported samples. */
+function KitSelect({ row, onPickFile }: { row: DrumRow; onPickFile: (f: File) => void }) {
   const track = useProject((s) => s.project.drums[row]);
   const update = useProject((s) => s.update);
   const samples = useSamples((s) => s.samples);
@@ -206,9 +295,10 @@ function RowSettings({ row, onPickFile }: { row: DrumRow; onPickFile: (f: File) 
   const value = track.sound.kind === 'synth' ? 'synth:' + track.sound.id : 'user:' + track.sound.id;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center">
       <select
-        className="bg-transparent text-xs text-cream-500 hover:text-cream-100 max-w-[92px] truncate focus:outline-none cursor-pointer"
+        aria-label={`${ROW_INFO[row].label} sound`}
+        className="bg-transparent text-xs text-cream-500 hover:text-cream-100 w-full truncate cursor-pointer rounded"
         value={value}
         onChange={(e) => {
           const v = e.target.value;
@@ -253,50 +343,6 @@ function RowSettings({ row, onPickFile }: { row: DrumRow; onPickFile: (f: File) 
           e.target.value = '';
         }}
       />
-      <button
-        className={'text-[10px] font-bold px-1 rounded ' + (track.mute ? 'bg-kick text-ink-950' : 'text-cream-500 hover:text-cream-100')}
-        onClick={() => update((p) => void (p.drums[row].mute = !p.drums[row].mute))}
-        title="Mute"
-      >
-        M
-      </button>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={track.volume}
-        className="w-12 !h-4"
-        title="Volume"
-        onChange={(e) => update((p) => void (p.drums[row].volume = Number(e.target.value)), 'vol:' + row)}
-      />
-    </div>
-  );
-}
-
-function BassSettings() {
-  const bass = useProject((s) => s.project.bass);
-  const update = useProject((s) => s.update);
-  return (
-    <div className="flex items-center gap-1">
-      <button
-        className={'text-[10px] font-bold px-1 rounded ' + (!bass.enabled ? 'bg-kick text-ink-950' : 'text-cream-500 hover:text-cream-100')}
-        onClick={() => update((p) => void (p.bass.enabled = !p.bass.enabled))}
-        title="Mute"
-      >
-        M
-      </button>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={bass.volume}
-        className="w-12 !h-4"
-        title="Volume"
-        onChange={(e) => update((p) => void (p.bass.volume = Number(e.target.value)), 'vol:bass')}
-      />
-      <span className="text-xs text-cream-500">follows chords</span>
     </div>
   );
 }

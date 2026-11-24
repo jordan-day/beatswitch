@@ -1,5 +1,6 @@
 import { slotLength } from '../music/patterns';
 import { useProject, useUi, type Track } from '../state/project';
+import { sectionColor } from '../state/song';
 import { DRUM_ROWS, MELODY_ROWS, STEPS_PER_BAR } from '../state/types';
 
 const DRUM_COLORS = ['#e8916b', '#e6c27a', '#9ccf9a', '#7fc4c9', '#b6a2e0'];
@@ -24,15 +25,12 @@ export function Overview() {
   const count = p.chords.slots.length;
   const len = slotLength(p.bars, count);
   const activeSlot = step >= 0 ? Math.min(count - 1, Math.floor(step / len)) : -1;
-  const showBar = track !== 'chords';
-
-  const open = (t: Track, e?: React.MouseEvent<HTMLElement>) => {
-    const next: Partial<ReturnType<typeof useUi.getState>> = { track: t };
-    if (e) {
-      const r = e.currentTarget.getBoundingClientRect();
-      next.viewBar = Math.min(p.bars - 1, Math.floor(((e.clientX - r.left) / r.width) * p.bars));
-    }
-    set(next);
+  // The lane names on the left switch editor; clicking in the lanes or on a bar only moves
+  // to that bar, so you stay in the editor you're using.
+  const open = (t: Track) => set({ track: t });
+  const goToBar = (e: React.MouseEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    set({ viewBar: Math.min(p.bars - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * p.bars))) });
   };
 
   return (
@@ -40,13 +38,13 @@ export function Overview() {
       <div className="flex gap-2">
         {/* lane labels */}
         <div className="w-24 shrink-0 flex flex-col gap-1">
-          <div className="h-5 label leading-5">Song</div>
+          <SectionSwitcher />
           {LANES.map((l) => (
             <button
               key={l.id}
               onClick={() => open(l.track)}
               className={
-                'h-7 rounded-lg px-2 text-left text-sm font-bold flex items-center gap-1.5 transition ' +
+                'h-6 rounded-lg px-2 text-left text-sm font-bold flex items-center gap-1.5 transition ' +
                 (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500 hover:bg-ink-700 hover:text-cream-100')
               }
             >
@@ -63,12 +61,13 @@ export function Overview() {
             {Array.from({ length: p.bars }, (_, b) => (
               <button
                 key={b}
-                onClick={() => set({ viewBar: b, track: track === 'chords' ? 'beat' : track })}
+                onClick={() => set({ viewBar: b })}
+                aria-pressed={b === bar}
                 className={
                   'text-[11px] font-bold text-left pl-1.5 border-l-2 rounded-sm transition ' +
-                  (showBar && b === bar ? 'border-cream-100 text-cream-100 bg-ink-600/60' : 'border-ink-600 text-cream-500 hover:text-cream-100')
+                  (b === bar ? 'border-cream-100 text-cream-100 bg-ink-600/60' : 'border-ink-600 text-cream-500 hover:text-cream-100')
                 }
-                title={`Edit bar ${b + 1}`}
+                title={`Go to bar ${b + 1}`}
               >
                 Bar {b + 1}
               </button>
@@ -76,7 +75,7 @@ export function Overview() {
           </div>
 
           {/* drums: a tiny version of the grid */}
-          <Lane active={track === 'beat'} onClick={(e) => open('beat', e)}>
+          <Lane active={track === 'beat'} onClick={goToBar}>
             <div className="grid h-full gap-px" style={cols}>
               {Array.from({ length: total }, (_, i) => (
                 <div key={i} className={'flex flex-col justify-between py-0.5 ' + (i % 4 === 0 ? 'bg-ink-700/70' : '')}>
@@ -93,7 +92,7 @@ export function Overview() {
           </Lane>
 
           {/* bass */}
-          <Lane active={track === 'beat'} onClick={(e) => open('beat', e)} dim={!p.bass.enabled}>
+          <Lane active={track === 'beat'} onClick={goToBar} dim={!p.bass.enabled}>
             <div className="grid h-full gap-px" style={cols}>
               {Array.from({ length: total }, (_, i) => {
                 const s = p.bass.steps[i];
@@ -107,8 +106,19 @@ export function Overview() {
           </Lane>
 
           {/* chords */}
-          <Lane active={track === 'chords'} onClick={() => open('chords')}>
-            <div className="flex h-full gap-px">
+          <Lane active={track === 'chords'} onClick={goToBar}>
+            <div className="relative flex h-full gap-px">
+              {/* custom rhythm: a tick under each chord hit */}
+              {p.chords.rhythm === 'custom' &&
+                p.chords.steps.slice(0, total).map((on, i) =>
+                  on ? (
+                    <div
+                      key={'hit' + i}
+                      className="absolute bottom-0.5 h-1 rounded-full bg-cream-100/80 pointer-events-none z-10"
+                      style={{ left: `${(i / total) * 100}%`, width: `${100 / total}%` }}
+                    />
+                  ) : null,
+                )}
               {p.chords.slots.map((c, i) => (
                 <button
                   key={i}
@@ -116,11 +126,9 @@ export function Overview() {
                     'flex-1 min-w-0 rounded-md px-1.5 text-left text-xs font-extrabold truncate transition ' +
                     (activeSlot === i ? 'bg-chord text-ink-950' : c ? 'bg-chord/25 text-cream-100 hover:bg-chord/40' : 'bg-ink-700/50 text-cream-500')
                   }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    set({ track: 'chords', selectedSlot: i });
-                  }}
-                  title={c ? `Edit ${c.symbol}` : 'Rest: click to add a chord'}
+                  // picks this chord for the Chords editor; the lane click also moves to its bar
+                  onClick={() => set({ selectedSlot: i })}
+                  title={c ? `${c.symbol}: chord ${i + 1}` : `Chord ${i + 1}: silent`}
                 >
                   {c ? c.symbol : '–'}
                 </button>
@@ -129,7 +137,7 @@ export function Overview() {
           </Lane>
 
           {/* melody: a tiny piano roll */}
-          <Lane active={track === 'melody'} onClick={(e) => open('melody', e)} dim={p.melody.mute}>
+          <Lane active={track === 'melody'} onClick={goToBar} dim={p.melody.mute}>
             <div className="relative h-full">
               {p.melody.notes.length === 0 && (
                 <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-cream-500">Empty: click to write a melody</span>
@@ -170,12 +178,36 @@ export function Overview() {
   );
 }
 
+/** Which section the editors are showing; pick another to edit it. */
+function SectionSwitcher() {
+  const p = useProject((s) => s.project);
+  const switchSection = useProject((s) => s.switchSection);
+  const playingOther = useUi((s) => s.playing && s.playMode === 'song' && s.step < 0);
+  return (
+    <div className="h-5 flex items-center gap-1" title={playingOther ? 'The song is playing another section right now' : 'Section you are editing'}>
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: sectionColor(p, p.activeSection) }} />
+      <select
+        className="bg-transparent text-[11px] font-extrabold uppercase tracking-wide text-cream-100 min-w-0 w-full cursor-pointer rounded"
+        value={p.activeSection}
+        onChange={(e) => switchSection(e.target.value)}
+        aria-label="Section you are editing"
+      >
+        {p.sections.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function Lane(props: { active: boolean; dim?: boolean; onClick: (e: React.MouseEvent<HTMLDivElement>) => void; children: React.ReactNode }) {
   return (
     <div
       onClick={props.onClick}
       className={
-        'h-7 rounded-lg px-0.5 cursor-pointer transition border ' +
+        'h-6 rounded-lg px-0.5 cursor-pointer transition border ' +
         (props.active ? 'bg-ink-900/70 border-ink-600' : 'bg-ink-900/40 border-transparent hover:border-ink-600') +
         (props.dim ? ' opacity-40' : '')
       }

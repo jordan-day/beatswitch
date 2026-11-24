@@ -1,7 +1,35 @@
-import { togglePlay } from '../audio/engine';
+import { setPlayMode, togglePlay } from '../audio/engine';
 import { useProject, useUi } from '../state/project';
 import { BPM_MAX, BPM_MIN } from '../state/types';
 import { Slider } from './common';
+
+/** What Play plays: the section you're editing (looping), or the whole song once. */
+function PlayMode() {
+  const mode = useUi((s) => s.playMode);
+  const opts = [
+    { id: 'section' as const, label: '🔁 Section', hint: 'Loop the section you are editing' },
+    { id: 'song' as const, label: '🎼 Song', hint: 'Play the whole arrangement once' },
+  ];
+  return (
+    <div className="flex flex-col gap-0.5 -ml-2" role="radiogroup" aria-label="Play">
+      {opts.map((o) => (
+        <button
+          key={o.id}
+          role="radio"
+          aria-checked={mode === o.id}
+          title={o.hint}
+          onClick={() => setPlayMode(o.id)}
+          className={
+            'text-[11px] font-bold rounded-md px-2 py-0.5 text-left transition ' +
+            (mode === o.id ? 'bg-cream-100 text-ink-950' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-700')
+          }
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** Play button, tempo, swing, loop length and undo/redo: compact, for the top bar. */
 export function Transport() {
@@ -12,7 +40,7 @@ export function Transport() {
   const { undo, redo, past, future } = useProject();
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
       <button
         onClick={() => togglePlay()}
         className={
@@ -24,6 +52,7 @@ export function Transport() {
       >
         {playing ? '■' : '▶'}
       </button>
+      <PlayMode />
 
       <Slider
         className="w-24"
@@ -48,17 +77,18 @@ export function Transport() {
         onChange={(v) => update((p) => void (p.swing = v), 'swing')}
       />
 
-      <div className="flex flex-col gap-1" title="How long the loop is before it repeats.">
-        <span className="label">Loop</span>
+      <div className="flex flex-col gap-1" title="How many bars the section's loop is before it repeats.">
+        <span className="label">Bars</span>
         <div className="flex rounded-lg bg-ink-700 p-0.5">
           {([1, 2, 4] as const).map((b) => (
             <button
               key={b}
-              className={'px-2.5 py-0.5 rounded-md text-xs font-bold transition ' + (bars === b ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')}
+              className={'w-7 py-0.5 rounded-md text-xs font-bold transition ' + (bars === b ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')}
               onClick={() => setBars(b)}
               aria-pressed={bars === b}
+              aria-label={`${b} bar${b > 1 ? 's' : ''}`}
             >
-              {b} bar{b > 1 ? 's' : ''}
+              {b}
             </button>
           ))}
         </div>

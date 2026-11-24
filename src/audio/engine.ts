@@ -2,7 +2,8 @@ import * as Tone from 'tone';
 import { useProject, useUi } from '../state/project';
 import { DRUM_ROWS, STEPS_PER_BAR, type ChordSlot, type Project } from '../state/types';
 import { getCachedBuffer, loadSample } from '../storage/samples';
-import { Graph, loadProjectBuiltins, toToneSwing } from './graph';
+import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
+import { songSteps } from '../state/song';
 
 /**
  * Live playback. The UI only edits the store; the engine subscribes and keeps the
@@ -61,24 +62,57 @@ export function ensureAudio(): Promise<Graph> {
   return booting;
 }
 
+/**
+ * Start playback: in 'section' mode the section being edited loops; in 'song' mode the whole
+ * arrangement plays once (with its fades) and stops at the end.
+ */
 export async function play() {
   const g = await ensureAudio();
   const t = Tone.getTransport();
   if (t.state === 'started') return;
+  const songMode = useUi.getState().playMode === 'song';
+  const startP = useProject.getState().project;
+  if (songMode && songSteps(startP) === 0) {
+    useUi.getState().notify('The song is empty. Add a section to it in the 🎼 Song tab.');
+    return;
+  }
   counter = 0;
+  let ended = false;
   if (repeatId !== null) t.clear(repeatId);
+  const startAt = Tone.now() + 0.05;
+  g.resetFades();
+  if (songMode) g.scheduleFades(startP, startAt, songSteps(startP) * stepSeconds(startP.bpm));
+
   repeatId = t.scheduleRepeat((time) => {
     const p = useProject.getState().project;
-    const step = counter % (p.bars * STEPS_PER_BAR);
-    counter++;
-    g.scheduleStep(step, time, p);
+    if (!songMode) {
+      const step = counter % (p.bars * STEPS_PER_BAR);
+      counter++;
+      g.scheduleStep(step, time, p);
+      Tone.getDraw().schedule(() => {
+        const ui = useUi.getState();
+        if (ui.playing) ui.set({ step });
+      }, time);
+      return;
+    }
+    const songStep = counter++;
+    const at = g.scheduleSongStep(songStep, time, p);
+    if (!at) {
+      // end of the song: let the last notes ring out, then stop
+      if (!ended) {
+        ended = true;
+        Tone.getDraw().schedule(() => stop(), time + 1.5);
+      }
+      return;
+    }
     Tone.getDraw().schedule(() => {
       const ui = useUi.getState();
-      if (ui.playing) ui.set({ step });
+      // the editors show the playhead only while the section being edited is the one playing
+      if (ui.playing) ui.set({ songStep, step: at.seg.block.section === p.activeSection ? at.local : -1 });
     }, time);
   }, '16n');
   t.position = 0;
-  t.start('+0.05');
+  t.start(startAt);
   useUi.getState().set({ playing: true });
 }
 
@@ -88,7 +122,16 @@ export function stop() {
   if (repeatId !== null) t.clear(repeatId);
   repeatId = null;
   graph?.silence();
-  useUi.getState().set({ playing: false, step: -1 });
+  graph?.resetFades();
+  useUi.getState().set({ playing: false, step: -1, songStep: -1 });
+}
+
+/** Switch between looping the section and playing the song (restarts if playing). */
+export async function setPlayMode(mode: 'section' | 'song') {
+  const wasPlaying = useUi.getState().playing;
+  if (wasPlaying) stop();
+  useUi.getState().set({ playMode: mode });
+  if (wasPlaying) await play();
 }
 
 export async function togglePlay() {
