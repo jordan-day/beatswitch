@@ -72,6 +72,7 @@ export function DrumGrid() {
       {/* rows stretch to fill the editor on tall screens and shrink (to a minimum) on short ones */}
       <div className="overflow-auto -mx-1 px-1 flex-1 min-h-0">
         <div className="min-w-[520px] sm:min-w-[720px] h-full flex flex-col gap-1.5">
+          <div className="relative flex-1 min-h-0 flex flex-col gap-1.5">
           <BeatRuler bar={bar} playStep={playStep - offset} />
           {DRUM_ROWS.map((row) => (
             <Row
@@ -98,6 +99,8 @@ export function DrumGrid() {
             }}
             onClear={() => clear('bass')}
           />
+          <Playhead local={playStep - offset} />
+          </div>
           <p className="text-xs text-cream-500 mt-1 shrink-0 sticky left-0 max-w-[calc(100vw-3.5rem)]">
             Click a square to add a hit, again for a <b className="text-cream-300">louder</b> hit, again to remove. Bass cycles{' '}
             <b className="text-cream-300">R</b> root → <b className="text-cream-300">5</b> fifth → <b className="text-cream-300">8</b> octave →
@@ -198,6 +201,27 @@ function Row(props: {
       >
         ✕
       </button>
+    </div>
+  );
+}
+
+/**
+ * A line running across the beat grid while it plays. It sits over the 16 step columns, which are
+ * laid out like each Row: name column (w-36 / sm:w-48), gap-2, the grid (gap-1), gap-2, clear button (w-6).
+ */
+function Playhead({ local }: { local: number }) {
+  if (local < 0 || local >= STEPS_PER_BAR) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex gap-2" aria-hidden="true">
+      <div className="w-36 sm:w-48 shrink-0" />
+      <div className="relative flex-1">
+        <div
+          className="absolute top-0 bottom-0 w-0.5 -ml-px rounded-full bg-cream-100 shadow-[0_0_8px_rgba(243,233,220,0.8)]"
+          // centre of column `local`: 16 columns share the width minus 15 gaps of 4px
+          style={{ left: `calc((100% - 60px) * ${(local + 0.5) / STEPS_PER_BAR} + ${local * 4}px)` }}
+        />
+      </div>
+      <div className="w-6 shrink-0" />
     </div>
   );
 }

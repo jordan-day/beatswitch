@@ -34,13 +34,48 @@ function PlayMode() {
   );
 }
 
-/** Play button, tempo, swing, loop length and undo/redo: compact, for the top bar. */
+/**
+ * Loop the whole section, or just the bar you're looking at (to practise or polish one bar).
+ * This only changes what plays; the section keeps all its bars.
+ */
+function LoopRange() {
+  const bars = useProject((s) => s.project.bars);
+  const { loopBar, viewBar, set } = useUi();
+  const bar = Math.min(viewBar, bars - 1) + 1;
+  const opts = [
+    { on: false, label: bars > 1 ? `All ${bars} bars` : 'All', hint: 'Loop every bar of the section' },
+    { on: true, label: `Bar ${bar}`, hint: 'Loop only the selected bar (pick a bar above the editor)' },
+  ];
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="label">Loop</span>
+      <div className="flex rounded-lg bg-ink-700 p-0.5" role="radiogroup" aria-label="What the loop plays">
+        {opts.map((o) => (
+          <button
+            key={String(o.on)}
+            role="radio"
+            aria-checked={loopBar === o.on}
+            title={o.hint}
+            onClick={() => set({ loopBar: o.on })}
+            className={
+              'px-2 py-0.5 rounded-md text-xs font-bold whitespace-nowrap transition ' +
+              (loopBar === o.on ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Play button, tempo, swing, loop range and undo/redo: compact, for the top bar. */
 export function Transport() {
   const playing = useUi((s) => s.playing);
   const wholeSong = useUi((s) => s.playMode === 'song');
-  const { bpm, swing, bars } = useProject((s) => s.project);
+  const { bpm, swing } = useProject((s) => s.project);
   const update = useProject((s) => s.update);
-  const setBars = useProject((s) => s.setBars);
   const { undo, redo, past, future } = useProject();
 
   return (
@@ -81,22 +116,8 @@ export function Transport() {
         onChange={(v) => update((p) => void (p.swing = v), 'swing')}
       />
 
-      <div className="flex flex-col gap-1" title="How many bars the section's loop is before it repeats.">
-        <span className="label">Bars</span>
-        <div className="flex rounded-lg bg-ink-700 p-0.5">
-          {([1, 2, 4] as const).map((b) => (
-            <button
-              key={b}
-              className={'w-7 py-0.5 rounded-md text-xs font-bold transition ' + (bars === b ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')}
-              onClick={() => setBars(b)}
-              aria-pressed={bars === b}
-              aria-label={`${b} bar${b > 1 ? 's' : ''}`}
-            >
-              {b}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* what the loop covers; only matters when looping a section, so it hides for whole-song playback */}
+      {!wholeSong && <LoopRange />}
 
       <div className="flex gap-1">
         <button className="btn px-2.5" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)" aria-label="Undo">

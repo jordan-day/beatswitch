@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { stepSeconds } from '../audio/graph';
 import { useProject, useUi, withUndo } from '../state/project';
 import {
@@ -19,6 +19,13 @@ const PART_ICON: Record<Part, { icon: string; label: string }> = {
   chords: { icon: '🎹', label: 'Chords' },
   melody: { icon: '🎵', label: 'Melody' },
 };
+
+/**
+ * What is being dragged: a section card (to add it to the song) or a block of the arrangement
+ * (to reorder it). Kept here rather than in dataTransfer, which can't be read during dragover.
+ */
+type Dragged = { kind: 'section'; id: string } | { kind: 'block'; index: number };
+let dragged: Dragged | null = null;
 
 /** The Song view: your sections, and the arrangement that strings them into a song. */
 export function SongEditor() {
@@ -48,7 +55,7 @@ export function SongEditor() {
         <div>
           <div className="flex items-baseline gap-2 mb-1.5">
             <span className="label">Sections</span>
-            <span className="text-[11px] text-cream-500">Each section is its own loop. ✏️ Edit opens its beat, chords and melody.</span>
+            <span className="text-[11px] text-cream-500">Each section is its own loop. ✏️ Edit opens its beat, chords and melody. Drag one into the arrangement to add it.</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {p.sections.map((s) => (
@@ -68,15 +75,11 @@ export function SongEditor() {
         <div>
           <div className="flex flex-wrap items-baseline gap-2 mb-1.5">
             <span className="label">Arrangement</span>
-            <span className="text-[11px] text-cream-500">Plays left to right. Switch parts off per block for intros, breakdowns and outros.</span>
+            <span className="text-[11px] text-cream-500">
+              Plays left to right. Drag blocks to reorder them. Switch parts off per block for intros, breakdowns and outros.
+            </span>
           </div>
-          {p.song.length === 0 ? (
-            <div className="rounded-xl border-2 border-dashed border-ink-600 p-4 text-sm text-cream-500">
-              Your song is empty. Use <b className="text-cream-300">＋ Add to song</b> on a section above.
-            </div>
-          ) : (
-            <Arrangement />
-          )}
+          <Arrangement />
         </div>
       </div>
     </section>
@@ -100,11 +103,26 @@ function SectionCard({ id }: { id: string }) {
   const s = p.sections.find((x) => x.id === id)!;
   const editing = id === p.activeSection;
   const uses = p.song.filter((b) => b.section === id).length;
+  // dragging starts anywhere on the card except the name box, so its text can still be selected
+  const fromInput = useRef(false);
 
   return (
     <div
-      className={'rounded-xl border-2 bg-ink-900/60 p-2 flex flex-col gap-1.5 w-52 ' + (editing ? 'border-cream-100' : 'border-ink-600')}
+      className={
+        'rounded-xl border-2 bg-ink-900/60 p-2 flex flex-col gap-1.5 w-52 cursor-grab active:cursor-grabbing ' +
+        (editing ? 'border-cream-100' : 'border-ink-600')
+      }
       style={{ boxShadow: `inset 4px 0 0 ${sectionColor(p, id)}` }}
+      draggable
+      onPointerDown={(e) => (fromInput.current = (e.target as HTMLElement).tagName === 'INPUT')}
+      onDragStart={(e) => {
+        if (fromInput.current) return e.preventDefault();
+        dragged = { kind: 'section', id };
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', s.name);
+      }}
+      onDragEnd={() => (dragged = null)}
+      title="Drag into the arrangement to add it to the song"
     >
       <div className="flex items-center gap-1 pl-1.5">
         <input
@@ -167,13 +185,73 @@ function SectionCard({ id }: { id: string }) {
 
 function Arrangement() {
   const p = useProject((s) => s.project);
-  const { removeBlock, moveBlock, setRepeats, toggleBlockMute, toggleFill } = useProject();
+  const { removeBlock, moveBlock, moveBlockTo, addBlock, setRepeats, toggleBlockMute, toggleFill } = useProject();
   const { songStep, playMode, playing } = useUi();
   const timeline = buildTimeline(p);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // where a drop would land (before block n; song length = at the end), and which block is being dragged
+  const [dropAt, setDropAt] = useState<number | null>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+
+  useEffect(() => {
+    const end = () => {
+      setDropAt(null);
+      setDragFrom(null);
+    };
+    window.addEventListener('dragend', end);
+    return () => window.removeEventListener('dragend', end);
+  }, []);
+
+  /** The drop position under the pointer: before the first block whose middle is right of it. */
+  const indexAt = (x: number) => {
+    for (const el of rowRef.current?.querySelectorAll<HTMLElement>('[data-block]') ?? []) {
+      const r = el.getBoundingClientRect();
+      if (x < r.left + r.width / 2) return Number(el.dataset.block);
+    }
+    return p.song.length;
+  };
+  // a block dropped just before or after itself stays put, so no marker there
+  const showMarker = (at: number) => dropAt === at && !(dragFrom !== null && (at === dragFrom || at === dragFrom + 1));
+
+  const onDragOver = (e: React.DragEvent) => {
+    if (!dragged) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = dragged.kind === 'section' ? 'copy' : 'move';
+    const at = indexAt(e.clientX);
+    if (at !== dropAt) setDropAt(at);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropAt(null);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const d = dragged;
+    const at = indexAt(e.clientX);
+    dragged = null;
+    setDropAt(null);
+    setDragFrom(null);
+    if (d?.kind === 'section') addBlock(d.id, at);
+    else if (d?.kind === 'block') moveBlockTo(d.index, at);
+  };
+  const dropHandlers = { onDragOver, onDragLeave, onDrop };
+  const marker = <div className="w-1 shrink-0 self-stretch rounded-full bg-cream-100 shadow-[0_0_8px_rgba(243,233,220,0.8)]" />;
+
+  if (timeline.length === 0)
+    return (
+      <div
+        {...dropHandlers}
+        className={
+          'rounded-xl border-2 border-dashed p-4 text-sm text-cream-500 transition ' +
+          (dropAt !== null ? 'border-cream-100 bg-ink-700/50' : 'border-ink-600')
+        }
+      >
+        Your song is empty. Drag a section here, or use <b className="text-cream-300">＋ Add to song</b> on a section above.
+      </div>
+    );
 
   return (
-    <div className="overflow-x-auto -mx-1 px-1 pb-1">
-      <div className="flex gap-1.5 items-stretch">
+    <div className="overflow-x-auto -mx-1 px-1 pb-1" {...dropHandlers}>
+      <div ref={rowRef} className="flex gap-1.5 items-stretch">
         {timeline.map((seg, i) => {
           const b = seg.block;
           const section = p.sections.find((s) => s.id === b.section)!;
@@ -181,11 +259,25 @@ function Arrangement() {
           const live = playing && playMode === 'song' && songStep >= seg.start && songStep < seg.start + seg.steps;
           const progress = live ? (songStep - seg.start) / seg.steps : 0;
           return (
+            <Fragment key={b.id}>
+            {showMarker(seg.index) && marker}
             <div
-              key={b.id}
-              className={'relative rounded-xl bg-ink-900/70 border-2 p-1.5 flex flex-col gap-1 shrink-0 ' + (live ? 'border-cream-100' : 'border-ink-600')}
+              data-block={seg.index}
+              draggable
+              onDragStart={(e) => {
+                dragged = { kind: 'block', index: seg.index };
+                setDragFrom(seg.index);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', section.name);
+              }}
+              className={
+                'relative rounded-xl bg-ink-900/70 border-2 p-1.5 flex flex-col gap-1 shrink-0 cursor-grab active:cursor-grabbing transition-opacity ' +
+                (live ? 'border-cream-100' : 'border-ink-600') +
+                (dragFrom === seg.index ? ' opacity-40' : '')
+              }
               style={{ width: Math.max(150, Math.min(260, seg.steps * 1.6)) }}
               aria-label={`Block ${i + 1}: ${section.name} ×${b.repeats}`}
+              title="Drag to move this block"
             >
               <div className="h-1.5 rounded-full" style={{ background: color }}>
                 {live && <div className="h-full rounded-full bg-cream-100" style={{ width: `${progress * 100}%` }} />}
@@ -265,8 +357,10 @@ function Arrangement() {
                 </button>
               </div>
             </div>
+            </Fragment>
           );
         })}
+        {showMarker(p.song.length) && marker}
       </div>
     </div>
   );

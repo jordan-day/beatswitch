@@ -4,6 +4,7 @@ import { DRUM_ROWS, STEPS_PER_BAR, type ChordSlot, type Project } from '../state
 import { getCachedBuffer, loadSample } from '../storage/samples';
 import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
 import { songSteps } from '../state/song';
+import { nextLoopStep, slotLength } from '../music/patterns';
 
 /**
  * Live playback. The UI only edits the store; the engine subscribes and keeps the
@@ -13,6 +14,30 @@ let graph: Graph | null = null;
 let booting: Promise<Graph> | null = null;
 let repeatId: number | null = null;
 let counter = 0;
+// last bar / chord the editors were moved to, so following only happens when playback moves on
+let followBar = -1;
+let followSlot = -1;
+
+/**
+ * Show the playhead, and make the editors follow along: when playback reaches a new bar the
+ * editors switch to it, and when it reaches a new chord that chord becomes the selected one.
+ * Only on changes, so clicking another bar or chord mid-bar isn't instantly undone.
+ */
+function showPlayhead(step: number, p: Project, extra: { songStep?: number } = {}) {
+  const ui = useUi.getState();
+  if (!ui.playing) return;
+  const patch: Parameters<typeof ui.set>[0] = { ...extra, step };
+  if (step >= 0) {
+    const bar = Math.floor(step / STEPS_PER_BAR);
+    if (bar !== followBar) patch.viewBar = followBar = bar;
+    const count = p.chords.slots.length;
+    const slot = Math.min(count - 1, Math.floor(step / slotLength(p.bars, count)));
+    if (slot !== followSlot) patch.selectedSlot = followSlot = slot;
+  } else {
+    followBar = followSlot = -1;
+  }
+  ui.set(patch);
+}
 
 function syncTransport(p: Project) {
   const t = Tone.getTransport();
@@ -77,6 +102,8 @@ export async function play() {
     return;
   }
   counter = 0;
+  followBar = followSlot = -1;
+  let lastStep = -1;
   let ended = false;
   if (repeatId !== null) t.clear(repeatId);
   const startAt = Tone.now() + 0.05;
@@ -86,13 +113,12 @@ export async function play() {
   repeatId = t.scheduleRepeat((time) => {
     const p = useProject.getState().project;
     if (!songMode) {
-      const step = counter % (p.bars * STEPS_PER_BAR);
+      const { loopBar, viewBar } = useUi.getState();
+      const step = nextLoopStep(lastStep, p.bars, loopBar ? viewBar : null);
+      lastStep = step;
       counter++;
       g.scheduleStep(step, time, p);
-      Tone.getDraw().schedule(() => {
-        const ui = useUi.getState();
-        if (ui.playing) ui.set({ step });
-      }, time);
+      Tone.getDraw().schedule(() => showPlayhead(step, p), time);
       return;
     }
     const songStep = counter++;
@@ -105,11 +131,8 @@ export async function play() {
       }
       return;
     }
-    Tone.getDraw().schedule(() => {
-      const ui = useUi.getState();
-      // the editors show the playhead only while the section being edited is the one playing
-      if (ui.playing) ui.set({ songStep, step: at.seg.block.section === p.activeSection ? at.local : -1 });
-    }, time);
+    // the editors show the playhead only while the section being edited is the one playing
+    Tone.getDraw().schedule(() => showPlayhead(at.seg.block.section === p.activeSection ? at.local : -1, p, { songStep }), time);
   }, '16n');
   t.position = 0;
   t.start(startAt);

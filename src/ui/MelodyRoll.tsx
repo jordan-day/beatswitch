@@ -174,6 +174,16 @@ export function MelodyRoll() {
                   );
                 }),
               )}
+              {/* playhead: a line running across the roll (16 columns, 15 gaps of 2px) */}
+              {playStep >= offset && playStep < offset + STEPS_PER_BAR && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-0 bottom-0 z-20 w-0.5 -ml-px rounded-full bg-cream-100 shadow-[0_0_8px_rgba(243,233,220,0.8)]"
+                  style={{
+                    left: `calc((100% - 30px) * ${(playStep - offset + 0.5) / STEPS_PER_BAR} + ${(playStep - offset) * 2}px)`,
+                  }}
+                />
+              )}
               {visible.map((n) => (
                 <div
                   key={`${n.s}-${n.d}`}

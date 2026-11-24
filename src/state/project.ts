@@ -41,9 +41,12 @@ interface ProjectStore {
   duplicateSection: (id: string) => void;
   renameSection: (id: string, name: string) => void;
   deleteSection: (id: string) => void;
-  addBlock: (sectionId: string) => void;
+  /** Add a section to the song, at the end or before block `at`. */
+  addBlock: (sectionId: string, at?: number) => void;
   removeBlock: (index: number) => void;
   moveBlock: (index: number, by: -1 | 1) => void;
+  /** Move block `from` so it lands before the block currently at `to` (`to` = song length: the end). */
+  moveBlockTo: (from: number, to: number) => void;
   setRepeats: (index: number, repeats: number) => void;
   toggleBlockMute: (index: number, part: Part) => void;
   toggleFill: (index: number) => void;
@@ -270,8 +273,12 @@ export const useProject = create<ProjectStore>((set, get) => ({
       p.song = p.song.filter((b) => b.section !== id);
     }),
 
-  addBlock: (sectionId) =>
-    get().update((p) => void p.song.push({ id: newId(), section: sectionId, repeats: 1, mute: noMutes(), fill: false })),
+  addBlock: (sectionId, at) =>
+    get().update((p) => {
+      if (!p.sections.some((s) => s.id === sectionId)) return;
+      const block = { id: newId(), section: sectionId, repeats: 1, mute: noMutes(), fill: false };
+      p.song.splice(at === undefined ? p.song.length : Math.max(0, Math.min(at, p.song.length)), 0, block);
+    }),
 
   removeBlock: (i) => get().update((p) => void p.song.splice(i, 1)),
 
@@ -280,6 +287,15 @@ export const useProject = create<ProjectStore>((set, get) => ({
       const j = i + by;
       if (j < 0 || j >= p.song.length) return;
       [p.song[i], p.song[j]] = [p.song[j], p.song[i]];
+    }),
+
+  moveBlockTo: (from, to) =>
+    get().update((p) => {
+      if (from < 0 || from >= p.song.length) return;
+      const dest = Math.max(0, Math.min(to, p.song.length));
+      if (dest === from || dest === from + 1) return; // dropped where it already is
+      const [block] = p.song.splice(from, 1);
+      p.song.splice(dest > from ? dest - 1 : dest, 0, block);
     }),
 
   setRepeats: (i, n) => get().update((p) => void (p.song[i] && (p.song[i].repeats = Math.max(1, Math.min(MAX_REPEATS, n))))),
@@ -314,6 +330,8 @@ interface UiStore {
   playing: boolean;
   /** Play loops the section being edited, or plays the whole arrangement once. */
   playMode: 'section' | 'song';
+  /** When looping the section: loop only the selected bar (viewBar) instead of every bar. */
+  loopBar: boolean;
   step: number; // playhead step in the section being edited, -1 when it isn't the one playing
   songStep: number; // playhead step in the whole song (song mode), -1 otherwise
   viewBar: number; // which bar the grid shows
@@ -329,6 +347,7 @@ export const useUi = create<UiStore>((set) => ({
   view: 'section',
   playing: false,
   playMode: 'section',
+  loopBar: false,
   step: -1,
   songStep: -1,
   viewBar: 0,

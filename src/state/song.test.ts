@@ -101,6 +101,29 @@ describe('arrangement timeline', () => {
     expect(p().song).toHaveLength(ids.length - 1);
   });
 
+  it('dragging: inserting a section at a position and moving blocks to a position', () => {
+    fresh(buildPreset(0));
+    const ids = p().song.map((b) => b.id);
+    expect(ids.length).toBeGreaterThanOrEqual(3);
+    store().addBlock(p().activeSection, 1);
+    expect(p().song).toHaveLength(ids.length + 1);
+    expect(p().song[0].id).toBe(ids[0]);
+    expect(p().song[2].id).toBe(ids[1]);
+    const added = p().song[1].id;
+
+    // first block to the end
+    store().moveBlockTo(0, p().song.length);
+    expect(p().song.map((b) => b.id)).toEqual([added, ...ids.slice(1), ids[0]]);
+    // last block to the front
+    store().moveBlockTo(p().song.length - 1, 0);
+    expect(p().song.map((b) => b.id)).toEqual([ids[0], added, ...ids.slice(1)]);
+    // dropping a block right where it is changes nothing (no undo step)
+    const before = p();
+    store().moveBlockTo(1, 1);
+    store().moveBlockTo(1, 2);
+    expect(p()).toBe(before);
+  });
+
   it('section views hold that section\'s patterns with the song-wide sounds', () => {
     fresh(buildPreset(0));
     const verse = p().activeSection;

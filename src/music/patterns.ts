@@ -9,6 +9,19 @@ import {
   type Step,
 } from '../state/types';
 
+/**
+ * The next step to play when looping a section of `bars` bars. `loopBar` is the bar to loop on
+ * its own, or null to loop every bar. Changing it takes effect at the next bar line, so the beat
+ * never jumps mid-bar. `last` is the step just played (-1 before the first one).
+ */
+export function nextLoopStep(last: number, bars: number, loopBar: number | null): number {
+  const total = bars * STEPS_PER_BAR;
+  const next = last + 1;
+  if (last >= 0 && next % STEPS_PER_BAR !== 0) return next % total; // mid-bar: carry on
+  if (loopBar !== null) return Math.max(0, Math.min(loopBar, bars - 1)) * STEPS_PER_BAR; // back to the looped bar
+  return last < 0 ? 0 : next % total;
+}
+
 /** Parse "x...X..." (x = on, X = accent, anything else = off) and repeat to fill all 64 steps. */
 export function parsePattern(s: string): Step[] {
   const clean = s.replace(/\s|\|/g, '');

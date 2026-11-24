@@ -2,7 +2,7 @@ import { Chord, Note } from 'tonal';
 import { describe, expect, it } from 'vitest';
 import { MOODS } from '../state/types';
 import { bassNote, chordRoot, degreeToChord, fittingChords, PROGRESSIONS, progressionChords, scaleNotes, TONICS, voiceChord } from './chords';
-import { chordHits, extendSteps, lofiMacro, parsePattern, randomDrums, slotLength } from './patterns';
+import { chordHits, extendSteps, lofiMacro, nextLoopStep, parsePattern, randomDrums, slotLength } from './patterns';
 import { buildPreset, PRESET_LIST } from './presets';
 
 describe('chords', () => {
@@ -108,5 +108,47 @@ describe('patterns', () => {
       expect(p.chords.slots.every(Boolean)).toBe(true);
       expect(p.drums.kick.steps).toHaveLength(64);
     }
+  });
+});
+
+describe('loop range', () => {
+  /** Play `n` steps from the start and return them. */
+  const run = (n: number, bars: number, loopBar: () => number | null) => {
+    const out: number[] = [];
+    let last = -1;
+    for (let i = 0; i < n; i++) out.push((last = nextLoopStep(last, bars, loopBar())));
+    return out;
+  };
+
+  it('loops every bar of the section', () => {
+    const steps = run(64 + 3, 4, () => null);
+    expect(steps.slice(0, 64)).toEqual(Array.from({ length: 64 }, (_, i) => i));
+    expect(steps.slice(64)).toEqual([0, 1, 2]);
+  });
+
+  it('loops only the selected bar', () => {
+    const steps = run(32, 4, () => 2);
+    expect(steps).toEqual([...Array.from({ length: 16 }, (_, i) => 32 + i), ...Array.from({ length: 16 }, (_, i) => 32 + i)]);
+  });
+
+  it('switches bars at the next bar line, not mid-bar', () => {
+    let bar = 1;
+    let last = -1;
+    const steps: number[] = [];
+    for (let i = 0; i < 24; i++) {
+      if (i === 5) bar = 3; // picked another bar part-way through
+      steps.push((last = nextLoopStep(last, 4, bar)));
+    }
+    expect(steps.slice(0, 16)).toEqual(Array.from({ length: 16 }, (_, i) => 16 + i)); // bar 2 finishes
+    expect(steps.slice(16)).toEqual(Array.from({ length: 8 }, (_, i) => 48 + i)); // then bar 4
+  });
+
+  it('turning the one-bar loop off carries on into the next bar', () => {
+    expect(nextLoopStep(31, 4, null)).toBe(32);
+    expect(nextLoopStep(63, 4, null)).toBe(0);
+  });
+
+  it('keeps the looped bar inside the section', () => {
+    expect(nextLoopStep(-1, 2, 3)).toBe(16);
   });
 });
