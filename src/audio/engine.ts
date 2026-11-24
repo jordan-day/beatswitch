@@ -73,7 +73,7 @@ export async function play() {
   const songMode = useUi.getState().playMode === 'song';
   const startP = useProject.getState().project;
   if (songMode && songSteps(startP) === 0) {
-    useUi.getState().notify('The song is empty. Add a section to it in the 🎼 Song tab.');
+    useUi.getState().notify('The song is empty. Open 🎼 Song and use "Add to song" on a section.');
     return;
   }
   counter = 0;

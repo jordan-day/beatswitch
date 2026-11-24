@@ -3,15 +3,18 @@ import { useProject, useUi } from '../state/project';
 import { BPM_MAX, BPM_MIN } from '../state/types';
 import { Slider } from './common';
 
-/** What Play plays: the section you're editing (looping), or the whole song once. */
+/**
+ * What the Play button plays: the section you're editing, looping, or the whole song once.
+ * Worded "Loop / Whole song" so it isn't confused with the Section / Song view tabs.
+ */
 function PlayMode() {
   const mode = useUi((s) => s.playMode);
   const opts = [
-    { id: 'section' as const, label: '🔁 Section', hint: 'Loop the section you are editing' },
-    { id: 'song' as const, label: '🎼 Song', hint: 'Play the whole arrangement once' },
+    { id: 'section' as const, label: '🔁 Loop', hint: 'Play button loops the section you are editing' },
+    { id: 'song' as const, label: '🎼 Whole song', hint: 'Play button plays the whole song once, start to finish' },
   ];
   return (
-    <div className="flex flex-col gap-0.5 -ml-2" role="radiogroup" aria-label="Play">
+    <div className="flex flex-col gap-0.5 -ml-2" role="radiogroup" aria-label="Play button plays">
       {opts.map((o) => (
         <button
           key={o.id}
@@ -34,6 +37,7 @@ function PlayMode() {
 /** Play button, tempo, swing, loop length and undo/redo: compact, for the top bar. */
 export function Transport() {
   const playing = useUi((s) => s.playing);
+  const wholeSong = useUi((s) => s.playMode === 'song');
   const { bpm, swing, bars } = useProject((s) => s.project);
   const update = useProject((s) => s.update);
   const setBars = useProject((s) => s.setBars);
@@ -47,7 +51,7 @@ export function Transport() {
           'w-12 h-12 shrink-0 rounded-full text-xl font-black grid place-items-center transition active:scale-95 shadow-lg ' +
           (playing ? 'bg-cream-100 text-ink-950' : 'bg-kick text-ink-950 hover:brightness-110')
         }
-        title="Play / stop (Space)"
+        title={`${playing ? 'Stop' : wholeSong ? 'Play the whole song' : 'Play the loop'} (Space)`}
         aria-label={playing ? 'Stop' : 'Play'}
       >
         {playing ? '■' : '▶'}
@@ -55,7 +59,7 @@ export function Transport() {
       <PlayMode />
 
       <Slider
-        className="w-24"
+        className="w-[88px]"
         label="Tempo"
         display={`${bpm}`}
         min={BPM_MIN}
@@ -66,7 +70,7 @@ export function Transport() {
         onChange={(v) => update((p) => void (p.bpm = v), 'bpm')}
       />
       <Slider
-        className="w-24"
+        className="w-[88px]"
         label="Swing"
         display={`${Math.round(swing)}%`}
         min={0}

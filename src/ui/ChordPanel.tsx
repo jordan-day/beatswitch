@@ -63,17 +63,15 @@ export function ChordPanel() {
               const playing = step >= 0 && Math.floor(step / STEPS_PER_BAR) === b;
               return (
                 <div key={b} className={'flex-1 min-w-0 flex flex-col gap-1 ' + (b > 0 ? 'border-l-2 border-ink-600 pl-2 ml-2' : '')}>
-                  <button
+                  <div
                     className={
-                      'self-start text-[11px] font-bold uppercase tracking-wider rounded px-1 -ml-1 flex items-center gap-1 ' +
-                      (b === viewBar ? 'text-cream-100' : 'text-cream-500 hover:text-cream-100')
+                      'text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ' +
+                      (b === viewBar ? 'text-cream-100' : 'text-cream-500')
                     }
-                    onClick={() => set({ viewBar: b })}
-                    title={`Bar ${b + 1}`}
                   >
                     Bar {b + 1}
                     {playing && <span className="w-1.5 h-1.5 rounded-full bg-kick" aria-label="playing" />}
-                  </button>
+                  </div>
                   <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${perBar}, minmax(0, 1fr))` }}>
                     {p.chords.slots.slice(first, first + perBar).map((c, k) => {
                       const i = first + k;

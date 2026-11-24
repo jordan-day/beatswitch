@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { stepSeconds } from '../audio/graph';
-import { play, setPlayMode } from '../audio/engine';
 import { useProject, useUi, withUndo } from '../state/project';
 import {
   buildTimeline,
@@ -41,16 +40,7 @@ export function SongEditor() {
         <Toggle on={p.fadeOut} onClick={() => setFade('fadeOut', !p.fadeOut)} title="Fade out over the last 4 bars">
           Fade out
         </Toggle>
-        <button
-          className="btn text-xs"
-          onClick={async () => {
-            await setPlayMode('song');
-            if (!useUi.getState().playing) await play();
-          }}
-          title="Play the whole arrangement from the start"
-        >
-          ▶ Play song
-        </button>
+        <span className="text-[11px] text-cream-500 ml-auto">To hear it: pick 🎼 Whole song next to ▶ at the top.</span>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 flex flex-col gap-3">
@@ -177,7 +167,7 @@ function SectionCard({ id }: { id: string }) {
 
 function Arrangement() {
   const p = useProject((s) => s.project);
-  const { removeBlock, moveBlock, setRepeats, toggleBlockMute, toggleFill, switchSection } = useProject();
+  const { removeBlock, moveBlock, setRepeats, toggleBlockMute, toggleFill } = useProject();
   const { songStep, playMode, playing } = useUi();
   const timeline = buildTimeline(p);
 
@@ -201,13 +191,7 @@ function Arrangement() {
                 {live && <div className="h-full rounded-full bg-cream-100" style={{ width: `${progress * 100}%` }} />}
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  className="font-extrabold text-sm truncate flex-1 text-left rounded hover:underline"
-                  onClick={() => { switchSection(b.section); useUi.getState().set({ view: 'section', viewBar: 0 }); }}
-                  title={`Edit "${section.name}"`}
-                >
-                  {section.name}
-                </button>
+                <span className="font-extrabold text-sm truncate flex-1">{section.name}</span>
                 <span className="text-[10px] text-cream-500">{(seg.steps / 16) | 0} bars</span>
               </div>
 

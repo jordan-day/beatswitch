@@ -25,32 +25,26 @@ export function Overview() {
   const count = p.chords.slots.length;
   const len = slotLength(p.bars, count);
   const activeSlot = step >= 0 ? Math.min(count - 1, Math.floor(step / len)) : -1;
-  // The lane names on the left switch editor; clicking in the lanes or on a bar only moves
-  // to that bar, so you stay in the editor you're using.
-  const open = (t: Track) => set({ track: t });
-  const goToBar = (e: React.MouseEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    set({ viewBar: Math.min(p.bars - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * p.bars))) });
-  };
+  // The overview is a picture of the section. Its one control is the "Bar n" row, which picks the
+  // bar to edit (the editor tabs switch editors; chords are picked in the Chords editor).
 
   return (
-    <section className="card p-3 sm:p-3 shrink-0" aria-label="Song overview">
+    <section className="card p-3 sm:p-3 shrink-0" aria-label="Section overview">
       <div className="flex gap-2">
-        {/* lane labels */}
+        {/* lane labels (the open editor's lanes are highlighted) */}
         <div className="w-24 shrink-0 flex flex-col gap-1">
           <SectionSwitcher />
           {LANES.map((l) => (
-            <button
+            <div
               key={l.id}
-              onClick={() => open(l.track)}
               className={
-                'h-6 rounded-lg px-2 text-left text-sm font-bold flex items-center gap-1.5 transition ' +
-                (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500 hover:bg-ink-700 hover:text-cream-100')
+                'h-6 rounded-lg px-2 text-sm font-bold flex items-center gap-1.5 ' +
+                (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500')
               }
             >
-              <span>{l.icon}</span>
+              <span aria-hidden="true">{l.icon}</span>
               {l.label}
-            </button>
+            </div>
           ))}
         </div>
 
@@ -67,15 +61,18 @@ export function Overview() {
                   'text-[11px] font-bold text-left pl-1.5 border-l-2 rounded-sm transition ' +
                   (b === bar ? 'border-cream-100 text-cream-100 bg-ink-600/60' : 'border-ink-600 text-cream-500 hover:text-cream-100')
                 }
-                title={`Go to bar ${b + 1}`}
+                title={`Edit bar ${b + 1}`}
               >
                 Bar {b + 1}
+                {step >= 0 && Math.floor(step / STEPS_PER_BAR) === b && (
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-kick ml-1.5 align-middle" aria-label="playing" />
+                )}
               </button>
             ))}
           </div>
 
           {/* drums: a tiny version of the grid */}
-          <Lane active={track === 'beat'} onClick={goToBar}>
+          <Lane active={track === 'beat'}>
             <div className="grid h-full gap-px" style={cols}>
               {Array.from({ length: total }, (_, i) => (
                 <div key={i} className={'flex flex-col justify-between py-0.5 ' + (i % 4 === 0 ? 'bg-ink-700/70' : '')}>
@@ -92,7 +89,7 @@ export function Overview() {
           </Lane>
 
           {/* bass */}
-          <Lane active={track === 'beat'} onClick={goToBar} dim={!p.bass.enabled}>
+          <Lane active={track === 'beat'} dim={!p.bass.enabled}>
             <div className="grid h-full gap-px" style={cols}>
               {Array.from({ length: total }, (_, i) => {
                 const s = p.bass.steps[i];
@@ -106,7 +103,7 @@ export function Overview() {
           </Lane>
 
           {/* chords */}
-          <Lane active={track === 'chords'} onClick={goToBar}>
+          <Lane active={track === 'chords'}>
             <div className="relative flex h-full gap-px">
               {/* custom rhythm: a tick under each chord hit */}
               {p.chords.rhythm === 'custom' &&
@@ -120,27 +117,25 @@ export function Overview() {
                   ) : null,
                 )}
               {p.chords.slots.map((c, i) => (
-                <button
+                <div
                   key={i}
                   className={
-                    'flex-1 min-w-0 rounded-md px-1.5 text-left text-xs font-extrabold truncate transition ' +
-                    (activeSlot === i ? 'bg-chord text-ink-950' : c ? 'bg-chord/25 text-cream-100 hover:bg-chord/40' : 'bg-ink-700/50 text-cream-500')
+                    'flex-1 min-w-0 rounded-md px-1.5 text-xs font-extrabold truncate flex items-center ' +
+                    (activeSlot === i ? 'bg-chord text-ink-950' : c ? 'bg-chord/25 text-cream-100' : 'bg-ink-700/50 text-cream-500')
                   }
-                  // picks this chord for the Chords editor; the lane click also moves to its bar
-                  onClick={() => set({ selectedSlot: i })}
                   title={c ? `${c.symbol}: chord ${i + 1}` : `Chord ${i + 1}: silent`}
                 >
                   {c ? c.symbol : '–'}
-                </button>
+                </div>
               ))}
             </div>
           </Lane>
 
           {/* melody: a tiny piano roll */}
-          <Lane active={track === 'melody'} onClick={goToBar} dim={p.melody.mute}>
+          <Lane active={track === 'melody'} dim={p.melody.mute}>
             <div className="relative h-full">
               {p.melody.notes.length === 0 && (
-                <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-cream-500">Empty: click to write a melody</span>
+                <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-cream-500">No melody yet</span>
               )}
               {p.melody.notes
                 .filter((n) => n.s < total)
@@ -202,13 +197,12 @@ function SectionSwitcher() {
   );
 }
 
-function Lane(props: { active: boolean; dim?: boolean; onClick: (e: React.MouseEvent<HTMLDivElement>) => void; children: React.ReactNode }) {
+function Lane(props: { active: boolean; dim?: boolean; children: React.ReactNode }) {
   return (
     <div
-      onClick={props.onClick}
       className={
-        'h-6 rounded-lg px-0.5 cursor-pointer transition border ' +
-        (props.active ? 'bg-ink-900/70 border-ink-600' : 'bg-ink-900/40 border-transparent hover:border-ink-600') +
+        'h-6 rounded-lg px-0.5 border ' +
+        (props.active ? 'bg-ink-900/70 border-ink-600' : 'bg-ink-900/40 border-transparent') +
         (props.dim ? ' opacity-40' : '')
       }
     >

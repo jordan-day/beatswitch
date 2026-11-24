@@ -40,7 +40,7 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open 🎼 Song (above the editor) to add sections (Intro, Verse, Chorus…) and line them up. Switch Play to "Song" to hear it all.'],
+    ['🎼', 'Build a song', 'Open 🎼 Song (above the editor) to add sections (Intro, Verse, Chorus…) and line them up. Next to ▶, pick "Whole song" to hear it all.'],
     ['📼', 'Set the vibe', 'On the right: pick a mood and key, and turn up the Lo-fi knob.'],
   ];
   return (
@@ -226,7 +226,7 @@ export default function App() {
   return (
     // Desktop: a fixed one-screen workspace (no page scrolling). Small screens: stacks and scrolls.
     <div className="lg:h-full flex flex-col gap-3 p-3 pb-24 lg:pb-3 max-w-[1600px] mx-auto">
-      <header className="card p-3 sm:p-3 shrink-0 flex flex-wrap items-center gap-x-4 gap-y-3">
+      <header className="card p-3 sm:p-3 shrink-0 flex flex-wrap items-center gap-x-3 gap-y-3">
         <div className="flex items-center gap-2">
           <span className="text-2xl">📼</span>
           <span className="text-xl font-black tracking-tight">

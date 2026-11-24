@@ -1,5 +1,4 @@
-import { useProject, useUi, type Track } from '../state/project';
-import { STEPS_PER_BAR } from '../state/types';
+import { useUi, type Track } from '../state/project';
 
 const TABS: { id: Track; label: string; icon: string }[] = [
   { id: 'beat', label: 'Beat', icon: '🥁' },
@@ -7,8 +6,11 @@ const TABS: { id: Track; label: string; icon: string }[] = [
   { id: 'melody', label: 'Melody', icon: '🎵' },
 ];
 
-/** Tabs to switch editor, an optional bar picker, and the editor's own actions on the right. */
-export function EditorHeader(props: { barPicker?: boolean; children?: React.ReactNode }) {
+/**
+ * Tabs to switch editor, and the editor's own actions on the right.
+ * (Which bar you're editing is picked in the "Bar n" row of the section overview above.)
+ */
+export function EditorHeader(props: { children?: React.ReactNode }) {
   const { track, set } = useUi();
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -28,32 +30,7 @@ export function EditorHeader(props: { barPicker?: boolean; children?: React.Reac
           </button>
         ))}
       </div>
-      {props.barPicker && <BarPicker />}
       <div className="flex flex-wrap items-center gap-1.5 ml-auto">{props.children}</div>
-    </div>
-  );
-}
-
-function BarPicker() {
-  const bars = useProject((s) => s.project.bars);
-  const { viewBar, step, set } = useUi();
-  if (bars <= 1) return null;
-  const bar = Math.min(viewBar, bars - 1);
-  const playingBar = step >= 0 ? Math.floor(step / STEPS_PER_BAR) : -1;
-  return (
-    <div className="flex items-center gap-1" aria-label="Bar to edit">
-      {Array.from({ length: bars }, (_, b) => (
-        <button
-          key={b}
-          className={'chip text-xs py-1 px-2.5 relative ' + (b === bar ? 'chip-on' : '')}
-          onClick={() => set({ viewBar: b })}
-          aria-pressed={b === bar}
-          title={`Edit bar ${b + 1}`}
-        >
-          Bar {b + 1}
-          {playingBar === b && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-kick" />}
-        </button>
-      ))}
     </div>
   );
 }

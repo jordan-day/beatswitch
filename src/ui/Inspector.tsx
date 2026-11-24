@@ -120,16 +120,7 @@ export function Inspector() {
               ))}
             </select>
           </label>
-          <div className="flex items-end gap-2">
-            <Slider
-              className="flex-1"
-              label="Bass volume"
-              value={p.bass.volume}
-              color="#e58fae"
-              onChange={(v) => update((d) => void (d.bass.volume = v), 'vol:bass')}
-            />
-            <MuteButton muted={!p.bass.enabled} onClick={() => update((d) => void (d.bass.enabled = !d.bass.enabled))} />
-          </div>
+          {/* bass mute and volume are on the Bass row in the grid, like every other row */}
         </Group>
       )}
 

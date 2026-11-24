@@ -35,7 +35,7 @@ const KIT_LABEL: Record<SynthKit, string> = {
 
 export function DrumGrid() {
   const project = useProject((s) => s.project);
-  const { toggleStep, toggleBass, toggleChordStep, clearRow, randomize } = useProject();
+  const { toggleStep, toggleBass, clearRow, randomize } = useProject();
   const { viewBar, step: playStep } = useUi();
   const bar = Math.min(viewBar, project.bars - 1);
   const offset = bar * STEPS_PER_BAR;
@@ -48,18 +48,13 @@ export function DrumGrid() {
       }
       const bsrc = p.bass.steps.slice(offset, offset + STEPS_PER_BAR);
       for (let b = 0; b < p.bars; b++) for (let i = 0; i < STEPS_PER_BAR; i++) p.bass.steps[b * STEPS_PER_BAR + i] = bsrc[i];
-      // the custom chord-hit row is shown in this grid too, so it gets copied with the rest
-      if (p.chords.rhythm === 'custom') {
-        const csrc = p.chords.steps.slice(offset, offset + STEPS_PER_BAR);
-        for (let b = 0; b < p.bars; b++) for (let i = 0; i < STEPS_PER_BAR; i++) p.chords.steps[b * STEPS_PER_BAR + i] = csrc[i];
-      }
     }));
 
   const clear = (row: RowId) => withUndo(`Cleared ${ROW_INFO[row].label.toLowerCase()}`, () => clearRow(row));
 
   return (
     <>
-      <EditorHeader barPicker>
+      <EditorHeader>
         {project.bars > 1 && (
           <button className="btn text-xs" onClick={copyToAll} title="Copy this bar into every other bar">
             ⧉ Copy bar to all
@@ -103,18 +98,6 @@ export function DrumGrid() {
             }}
             onClear={() => clear('bass')}
           />
-          {project.chords.rhythm === 'custom' && (
-            <Row
-              row="chords"
-              steps={project.chords.steps.slice(offset, offset + STEPS_PER_BAR).map((b) => (b ? 2 : 0))}
-              playStep={playStep - offset}
-              onToggle={(i) => {
-                ensureAudio();
-                toggleChordStep(offset + i);
-              }}
-              onClear={() => clear('chords')}
-            />
-          )}
           <p className="text-xs text-cream-500 mt-1 shrink-0 sticky left-0 max-w-[calc(100vw-3.5rem)]">
             Click a square to add a hit, again for a <b className="text-cream-300">louder</b> hit, again to remove. Bass cycles{' '}
             <b className="text-cream-300">R</b> root → <b className="text-cream-300">5</b> fifth → <b className="text-cream-300">8</b> octave →
@@ -146,7 +129,7 @@ function Row(props: {
   };
 
   return (
-    <div className="flex items-stretch gap-2 flex-1 min-h-[28px] max-h-[60px]">
+    <div className="flex items-stretch gap-2 flex-1 min-h-[26px] max-h-[60px]">
       <div
         className={
           // narrower on phones so more of the grid fits; the volume slider hides there too

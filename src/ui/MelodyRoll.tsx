@@ -77,7 +77,7 @@ export function MelodyRoll() {
 
   return (
     <>
-      <EditorHeader barPicker>
+      <EditorHeader>
         {m.mute && <span className="text-xs font-bold text-kick">🔇 Melody is muted</span>}
         <button
           className="btn text-xs"
