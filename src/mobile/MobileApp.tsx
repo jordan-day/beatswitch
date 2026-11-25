@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import { cutPreviews, play, setLoopMode, stop, togglePlay } from '../audio/engine';
-import { stepSeconds } from '../audio/graph';
 import { Toast } from '../App';
 import { useProject, useUi } from '../state/project';
-import { formatTime, songSteps } from '../state/song';
 import { BeatName, ProjectMenu } from '../ui/ProjectMenu';
 import { BeatScreen, ChordsScreen, HowToScreen, MelodyScreen, SongScreen, VibeScreen } from './MobileScreens';
 import { MobileLanding } from './MobileLanding';
@@ -125,10 +123,9 @@ export function MobileApp() {
         <div className="flex-1 min-w-0">
           <BeatName />
         </div>
+        <HeaderPlay song={screen === 'song' || screen === 'howto'} />
         <ProjectMenu onNew={startNewSong} />
       </header>
-
-      <PlayBar song={screen === 'song' || screen === 'howto'} />
 
       {wizard !== null && (
         <div className="shrink-0 px-4 pt-1 pb-2 flex items-center gap-2" aria-label={`Step ${wizard + 1} of ${WIZARD.length}`}>
@@ -191,30 +188,20 @@ export function MobileApp() {
   );
 }
 
-/** The big play button, and what it plays: the loop, or (on the Song screen) the whole song. */
-function PlayBar({ song }: { song: boolean }) {
-  const p = useProject((s) => s.project);
-  // only what it shows: in the loop it doesn't re-draw on every step (it only shows the time in a song)
+/**
+ * The play button, in the header next to the menu (no separate bar, so more of each screen fits).
+ * On the Song screen (and the wizard's last page) it plays the whole song; elsewhere it loops your loop.
+ */
+function HeaderPlay({ song }: { song: boolean }) {
   const playing = useUi((s) => s.playing);
-  const playMode = useUi((s) => s.playMode);
-  const songStep = useUi((s) => (s.playMode === 'song' ? s.songStep : -1));
-  const total = songSteps(p) * stepSeconds(p.bpm);
-  const at = playing && playMode === 'song' && songStep >= 0 ? songStep * stepSeconds(p.bpm) : 0;
   return (
-    <div className="shrink-0 mx-3 mb-1 flex items-center gap-3 rounded-2xl bg-ink-800 border border-ink-600/60 p-2 pr-4">
-      <button
-        onClick={() => (playing ? stop() : song ? void setLoopMode('song').then(play) : void togglePlay())}
-        className={'w-14 h-14 shrink-0 rounded-full text-2xl font-black grid place-items-center active:scale-95 transition ' + (playing ? 'bg-cream-100 text-ink-950' : 'bg-kick text-ink-950')}
-        aria-label={playing ? 'Stop' : 'Play'}
-      >
-        {playing ? '■' : '▶'}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div className="font-extrabold">{song ? 'Whole song' : 'Your loop'}</div>
-        <div className="text-xs text-cream-500">
-          {song ? `${playing ? formatTime(at) + ' / ' : ''}${formatTime(total)}` : `${p.bpm} BPM · plays on repeat`}
-        </div>
-      </div>
-    </div>
+    <button
+      onClick={() => (playing ? stop() : song ? void setLoopMode('song').then(play) : void togglePlay())}
+      className={'w-11 h-11 shrink-0 rounded-full text-lg font-black grid place-items-center active:scale-95 transition ' + (playing ? 'bg-cream-100 text-ink-950' : 'bg-kick text-ink-950')}
+      aria-label={playing ? 'Stop' : song ? 'Play the whole song' : 'Play your loop'}
+      title={playing ? 'Stop' : song ? 'Play the whole song' : 'Play your loop'}
+    >
+      {playing ? '■' : '▶'}
+    </button>
   );
 }

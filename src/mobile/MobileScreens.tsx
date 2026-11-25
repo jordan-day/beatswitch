@@ -363,6 +363,12 @@ export function MelodyScreen({ autoFill }: { autoFill?: boolean }) {
   const { addNote, removeNote, moveNote, randomizeMelody, update } = useProject();
   const step = useUi((s) => s.step);
   const [bar, setBar] = useState(0);
+  // follow playback: when the loop (or the song) moves into another bar, show that bar. Only on the
+  // change, so tapping a different bar to look at it isn't undone until the next bar starts.
+  const playingBar = useUi((s) => (s.step >= 0 ? Math.floor(s.step / STEPS_PER_BAR) : -1));
+  useEffect(() => {
+    if (playingBar >= 0) setBar(playingBar);
+  }, [playingBar]);
   const [ghost, setGhost] = useState<{ s: number; l: number; d: number; moving?: MelodyNote } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const g = useRef<Gesture>({ kind: 'none' });
