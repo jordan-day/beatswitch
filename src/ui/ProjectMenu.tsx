@@ -10,14 +10,35 @@ import { deleteSaved, listSaved, loadSaved, type SavedMeta } from '../storage/lo
 import { NewBeatDialog } from './NewBeatDialog';
 import { projectFromFile, projectToFile, shareUrl } from '../storage/share';
 
-const SAMPLES_NOTE = ' Imported samples stay on this computer, so those rows use the built-in kit.';
+const SAMPLES_NOTE = ' Imported sounds stay on this computer, so drum rows use the built-in kit and your sample is left out.';
 
-/** Beat name, the Beats menu (new / open), the ☰ file menu (save as JSON, export WAV or MP3, share) and Help. */
+/** The song's name, editable in place, with a quiet autosave note under it. Wide, so long names fit. */
+export function BeatName() {
+  const name = useProject((s) => s.project.name);
+  const update = useProject((s) => s.update);
+  return (
+    <div className="flex flex-col min-w-0">
+      <input
+        id="beat-name"
+        className="bg-transparent text-lg font-extrabold leading-tight border-b-2 border-transparent hover:border-ink-600 focus:border-kick focus:outline-none w-56 xl:w-80 max-w-full"
+        value={name}
+        onChange={(e) => update((p) => void (p.name = e.target.value.slice(0, 60)), 'name')}
+        aria-label="Song name"
+        title="Click to rename your song"
+      />
+      <AutosaveStatus />
+    </div>
+  );
+}
+
+/**
+ * The ☰ menu: new song, open song (starter beats, your saved songs, a file), save, export, share
+ * and help. "Open song…" swaps the menu for the list of songs, with a way back.
+ */
 export function ProjectMenu() {
   const project = useProject((s) => s.project);
-  const { update } = useProject();
   const notify = useUi((s) => s.notify);
-  const [menu, setMenu] = useState<'beats' | 'file' | null>(null);
+  const [menu, setMenu] = useState<'main' | 'open' | null>(null);
   const beatId = useProject((s) => s.beatId);
   const [exporting, setExporting] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
@@ -47,7 +68,7 @@ export function ProjectMenu() {
   const saveBeatFile = async () => {
     const { json, replacedSamples } = projectToFile(project);
     const result = await saveFile(new Blob([json], { type: 'application/json' }), `${safeName(project.name)}.json`);
-    if (result === 'saved') notify('Beat file saved ✨ Open it any time from 📂 Beats › Open a beat file.' + (replacedSamples ? SAMPLES_NOTE : ''));
+    if (result === 'saved') notify('Song saved ✨ Open it any time from ☰ › Open song › Open a song file.' + (replacedSamples ? SAMPLES_NOTE : ''));
     else if (result === 'unavailable') notify("Saving files isn't available in this view.");
   };
 
@@ -82,62 +103,27 @@ export function ProjectMenu() {
   };
 
   return (
-    <div ref={ref} className="flex flex-wrap items-center gap-2 relative">
-      <div className="flex flex-col">
-        <input
-          id="beat-name"
-          className="bg-transparent text-lg font-extrabold leading-tight border-b-2 border-transparent hover:border-ink-600 focus:border-kick focus:outline-none w-36 2xl:w-48"
-          value={project.name}
-          onChange={(e) => update((p) => void (p.name = e.target.value.slice(0, 60)), 'name')}
-          aria-label="Beat name"
-          title="Click to rename your beat"
-        />
-        <AutosaveStatus />
-      </div>
-
+    <div ref={ref} className="relative">
       <button
-        className="btn"
-        onClick={() => setMenu(menu === 'beats' ? null : 'beats')}
-        aria-expanded={menu === 'beats'}
+        className={'btn w-9 h-9 rounded-full p-0 text-lg ' + (menu ? 'bg-ink-600' : '')}
+        onClick={() => setMenu(menu ? null : 'main')}
+        aria-expanded={!!menu}
         aria-haspopup="menu"
-        title="Start a new beat, or open one"
-      >
-        📂 Beats <span className="text-xs opacity-70">▾</span>
-      </button>
-      <button
-        className="btn w-9 h-9 rounded-full p-0 text-lg"
-        onClick={() => setMenu(menu === 'file' ? null : 'file')}
-        aria-expanded={menu === 'file'}
-        aria-haspopup="menu"
-        aria-label="Menu: save and export"
-        title="Save as JSON, export WAV or MP3, share"
+        aria-label="Menu"
+        title="New, open, save and export songs, and help"
       >
         {exporting ? '⏳' : '☰'}
       </button>
-      <button
-        className="btn w-9 h-9 rounded-full p-0"
-        onClick={() => useUi.getState().set({ helpOpen: true })}
-        title="How does this work?"
-        aria-label="Help"
-      >
-        ?
-      </button>
 
-      {menu === 'beats' && (
-        <BeatsMenu
-          currentId={beatId}
-          onOpen={open}
+      {menu === 'main' && (
+        <MainMenu
+          busy={exporting}
           onNew={() => {
             setMenu(null);
             setNewOpen(true);
           }}
-          onError={notify}
-        />
-      )}
-      {menu === 'file' && (
-        <FileMenu
-          busy={exporting}
-          onJson={() => {
+          onOpen={() => setMenu('open')}
+          onSave={() => {
             setMenu(null);
             void saveBeatFile();
           }}
@@ -146,8 +132,13 @@ export function ProjectMenu() {
             setMenu(null);
             void onShare();
           }}
+          onHelp={() => {
+            setMenu(null);
+            useUi.getState().set({ helpOpen: true });
+          }}
         />
       )}
+      {menu === 'open' && <OpenMenu currentId={beatId} onOpen={open} onBack={() => setMenu('main')} onError={notify} />}
       {newOpen && (
         <NewBeatDialog
           onClose={() => setNewOpen(false)}
@@ -185,16 +176,17 @@ function AutosaveStatus() {
   );
 }
 
-function BeatsMenu({
+/** "Open song": the starter beats, your saved songs, or a song file. */
+function OpenMenu({
   currentId,
   onOpen,
   onError,
-  onNew,
+  onBack,
 }: {
   currentId: string;
   onOpen: (p: Project, message: string, id?: string) => void;
   onError: (text: string) => void;
-  onNew: () => void;
+  onBack: () => void;
 }) {
   const [saved, setSaved] = useState<SavedMeta[] | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -219,23 +211,12 @@ function BeatsMenu({
       role="menu"
       className="absolute top-full right-0 mt-2 z-50 card !bg-ink-800 shadow-2xl w-[min(20rem,calc(100vw-2rem))] p-2 max-h-[70vh] overflow-y-auto flex flex-col gap-0.5"
     >
-      <div className="label px-3 pt-1 pb-1">Starter beats</div>
-      {PRESET_LIST.map((pr) => (
-        <button key={pr.index} role="menuitem" className={item} onClick={() => onOpen(buildPreset(pr.index), `Loaded "${pr.name}". Press play!`)}>
-          <div className="font-bold">{pr.name}</div>
-          <div className="text-xs text-cream-500">{pr.blurb}</div>
-        </button>
-      ))}
-
-      <div className="label px-3 pt-3 pb-1 border-t border-ink-600 mt-1">Start from scratch</div>
-      <button role="menuitem" className={item} onClick={onNew}>
-        <div className="font-bold">✨ New beat…</div>
-        <div className="text-xs text-cream-500">Pick the mood, key, vibe and sounds first</div>
+      <button className="text-left rounded-lg px-3 py-1.5 text-sm font-bold text-cream-500 hover:text-cream-100 hover:bg-ink-700" onClick={onBack} autoFocus>
+        ‹ Back
       </button>
-
-      <div className="label px-3 pt-3 pb-1 border-t border-ink-600 mt-1">Your beats</div>
+      <div className="label px-3 pt-2 pb-1 border-t border-ink-600 mt-1">Your songs</div>
       {saved === null && <div className="text-sm text-cream-500 px-3 py-2">Loading…</div>}
-      {saved?.length === 0 && <div className="text-sm text-cream-500 px-3 py-2">Nothing yet. Beats you edit are saved here automatically.</div>}
+      {saved?.length === 0 && <div className="text-sm text-cream-500 px-3 py-2">Nothing yet. Songs you edit are saved here automatically.</div>}
       {saved?.map((s) =>
         confirmDelete === s.id ? (
           // In-page confirmation (pop-up dialogs are blocked inside Claude artifacts)
@@ -284,11 +265,17 @@ function BeatsMenu({
           </div>
         ),
       )}
-      <div className="border-t border-ink-600 mt-1" />
       <button role="menuitem" className={item} onClick={() => fileRef.current?.click()}>
-        <div className="font-bold">📄 Open a beat file…</div>
-        <div className="text-xs text-cream-500">A .json beat you saved or someone shared with you</div>
+        <div className="font-bold">📄 Open a song file…</div>
       </button>
+
+      <div className="label px-3 pt-3 pb-1 border-t border-ink-600 mt-1">Starter beats</div>
+      {PRESET_LIST.map((pr) => (
+        <button key={pr.index} role="menuitem" className={item} onClick={() => onOpen(buildPreset(pr.index), `Loaded "${pr.name}". Press play!`)}>
+          <div className="font-bold">{pr.name}</div>
+          <div className="text-xs text-cream-500">{pr.blurb}</div>
+        </button>
+      ))}
       <input
         ref={fileRef}
         type="file"
@@ -304,31 +291,48 @@ function BeatsMenu({
   );
 }
 
-/** The ☰ menu: get your beat out of the app. */
-function FileMenu(props: { busy: boolean; onJson: () => void; onExport: (f: AudioFormat) => void; onShare: () => void }) {
+/** The ☰ menu's first page: new, open, save, export (and share), help. */
+function MainMenu(props: {
+  busy: boolean;
+  onNew: () => void;
+  onOpen: () => void;
+  onSave: () => void;
+  onExport: (f: AudioFormat) => void;
+  onShare: () => void;
+  onHelp: () => void;
+}) {
   const item = 'text-left rounded-lg px-3 py-2 hover:bg-ink-700 w-full disabled:opacity-40 disabled:pointer-events-none';
+  const divider = ' border-t border-ink-600 mt-1 rounded-t-none';
   return (
     <div role="menu" className="absolute top-full right-0 mt-2 z-50 card !bg-ink-800 shadow-2xl w-[min(20rem,calc(100vw-2rem))] p-2 flex flex-col gap-0.5">
-      <div className="label px-3 pt-1 pb-1">Save &amp; export</div>
-      <button role="menuitem" className={item} onClick={props.onJson}>
-        <div className="font-bold">📄 Save as JSON</div>
-        <div className="text-xs text-cream-500">A beat file you can reopen later or send to a friend</div>
+      <button role="menuitem" className={item} onClick={props.onNew} autoFocus>
+        <div className="font-bold">✨ New song…</div>
       </button>
+      <button role="menuitem" className={item} onClick={props.onOpen}>
+        <div className="font-bold">
+          📂 Open song… <span className="float-right text-cream-500">›</span>
+        </div>
+      </button>
+      <button role="menuitem" className={item} onClick={props.onSave}>
+        <div className="font-bold">💾 Save song</div>
+      </button>
+
+      <div className={'label px-3 pt-2 pb-1' + divider}>Export song</div>
       <button role="menuitem" className={item} onClick={() => props.onExport('wav')} disabled={props.busy}>
         <div className="font-bold">🎧 Export WAV</div>
-        <div className="text-xs text-cream-500">The whole song, full quality</div>
       </button>
       <button role="menuitem" className={item} onClick={() => props.onExport('mp3')} disabled={props.busy}>
         <div className="font-bold">🎧 Export MP3</div>
-        <div className="text-xs text-cream-500">The whole song, a smaller file</div>
       </button>
       {!inArtifact && (
-        <button role="menuitem" className={item + ' border-t border-ink-600 mt-1'} onClick={props.onShare}>
+        <button role="menuitem" className={item} onClick={props.onShare}>
           <div className="font-bold">🔗 Copy share link</div>
-          <div className="text-xs text-cream-500">Anyone with the link can open this beat</div>
         </button>
       )}
-      <div className="text-xs text-cream-500 px-3 pt-2 pb-1">Your beats are also saved in this browser automatically.</div>
+
+      <button role="menuitem" className={item + divider} onClick={props.onHelp}>
+        <div className="font-bold">❓ Help</div>
+      </button>
     </div>
   );
 }

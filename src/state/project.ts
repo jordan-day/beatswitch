@@ -6,13 +6,15 @@ import { buildPreset } from '../music/presets';
 import { extendMelody, extendSteps, lofiMacro, randomDrums, rhythmToSteps } from '../music/patterns';
 import { saveProject } from '../storage/local';
 import { parseProject } from './schema';
-import { applyPatterns, extractPatterns, MAX_REPEATS, newId, nextSectionName, noMutes, type Part } from './song';
+import { applyPatterns, emptyHits, extractPatterns, MAX_REPEATS, newId, nextSectionName, noMutes, type Part } from './song';
 import { drumTrack, isDrumRow, MAIN_MELODY, melodyTrack } from './tracks';
 import {
+  CHORD_COUNTS,
   MAX_EXTRA_DRUMS,
   MAX_EXTRA_MELODIES,
   MAX_STEPS,
   MELODY_ROWS,
+  MAX_SAMPLE_SECONDS,
   MELODY_SOUNDS,
   type BassStep,
   type ChordRhythm,
@@ -77,6 +79,17 @@ interface ProjectStore {
   /** Add a melody with its own instrument; returns its id ('' when there are already as many as allowed). */
   addMelody: () => string;
   removeMelody: (id: string) => void;
+  /** Use an imported file (lasting `seconds`) as the song's sample, or swap the file of the one there is. */
+  setSample: (file: { id: string; name: string }, seconds: number) => void;
+  /**
+   * A file dropped on the page: make it the sample (unless it already is) and add a hit at `step`
+   * of the section being edited. A brand-new sample gets only that hit.
+   */
+  placeSample: (file: { id: string; name: string }, seconds: number, step: number) => void;
+  removeSample: () => void;
+  toggleSampleStep: (index: number) => void;
+  /** The part of the file that plays: from `start`, for `length` seconds. */
+  setSampleTrim: (start: number, length: number) => void;
   randomize: () => void;
   /** Replace a melody's notes with a new one that fits the key and chords. */
   randomizeMelody: (melody: string) => void;
@@ -115,6 +128,22 @@ function switchTo(p: Project, id: string) {
   applyPatterns(p, target.patterns);
   delete target.patterns;
   p.activeSection = id;
+}
+
+/**
+ * Make `file` the song's sample (in place). A new sample starts with a hit at `firstHit` (none if
+ * null); a different file for an existing sample keeps its hits, pitch and volume and starts the
+ * trim afresh; the same file again changes nothing.
+ */
+function applySampleFile(p: Project, file: { id: string; name: string }, seconds: number, firstHit: number | null) {
+  const length = Math.max(0.05, Math.min(seconds, MAX_SAMPLE_SECONDS));
+  if (p.sample) {
+    if (p.sample.id !== file.id) Object.assign(p.sample, { id: file.id, name: file.name, start: 0, length });
+    return;
+  }
+  p.sample = { id: file.id, name: file.name, start: 0, length, pitch: 0, volume: 0.8, mute: false, steps: emptyHits() };
+  if (firstHit !== null) p.sample.steps[firstHit] = true;
+  for (const s of p.sections) delete s.patterns?.sample;
 }
 
 let lastCoalesce = { key: '', at: 0 };
@@ -274,11 +303,14 @@ export const useProject = create<ProjectStore>((set, get) => ({
       if (r === 'custom' && p.chords.rhythm !== 'custom') {
         // Keep a pattern you drew before. Only when there's nothing of your own yet (empty, or one of
         // the ready-made rhythms) start from whatever the current rhythm sounds like.
+        // "Ready-made" means for any chord count and loop length, not just the current ones: the
+        // stored hits are left as they were when those changed (4 -> 8 chords), and a leftover
+        // 4-chord pattern would otherwise be kept as if drawn, silencing every other chord.
         const pattern = JSON.stringify(p.chords.steps);
         const untouched =
           !p.chords.steps.some(Boolean) ||
-          (['whole', 'half', 'stab'] as const).some(
-            (rh) => JSON.stringify(rhythmToSteps(rh, p.bars, p.chords.slots.length)) === pattern,
+          (['whole', 'half', 'stab'] as const).some((rh) =>
+            CHORD_COUNTS.some((n) => ([1, 2, 4] as const).some((bars) => JSON.stringify(rhythmToSteps(rh, bars, n)) === pattern)),
           );
         if (untouched) p.chords.steps = rhythmToSteps(p.chords.rhythm, p.bars, p.chords.slots.length);
       }
@@ -451,6 +483,33 @@ export const useProject = create<ProjectStore>((set, get) => ({
       for (const s of p.sections) delete s.patterns?.extraMelodies?.[id];
     }),
 
+  setSample: (file, seconds) => get().update((p) => applySampleFile(p, file, seconds, 0)),
+
+  placeSample: (file, seconds, step) =>
+    get().update((p) => {
+      applySampleFile(p, file, seconds, null);
+      p.sample!.steps[Math.max(0, Math.min(step, p.sample!.steps.length - 1))] = true;
+    }),
+
+  removeSample: () =>
+    get().update((p) => {
+      p.sample = null;
+      for (const s of p.sections) delete s.patterns?.sample;
+      for (const b of p.song) b.mute.sample = false;
+    }),
+
+  toggleSampleStep: (i) =>
+    get().update((p) => {
+      if (p.sample) p.sample.steps[i] = !p.sample.steps[i];
+    }),
+
+  setSampleTrim: (start, length) =>
+    get().update((p) => {
+      if (!p.sample) return;
+      p.sample.start = Math.max(0, start);
+      p.sample.length = Math.max(0.05, Math.min(length, MAX_SAMPLE_SECONDS));
+    }, 'sample-trim'),
+
   setLofi: (v) =>
     get().update((p) => {
       p.fx = { lofi: v, ...lofiMacro(v) };
@@ -560,12 +619,14 @@ useProject.subscribe((s, prev) => {
   }, 400);
 });
 
-export type Track = 'beat' | 'chords' | 'melody';
+export type Track = 'beat' | 'chords' | 'melody' | 'sample';
 
 /** Small UI-only state that shouldn't go into undo history or saves. */
 interface UiStore {
-  /** The editor (section picker + overview + Beat/Chords/Melody), or the song arrangement. */
-  view: 'editor' | 'song';
+  /** The page: there is one now (section chips, song timeline, overview and editors). */
+  view: 'editor';
+  /** A section chip or song block being dragged (the Song row previews where it will land). */
+  dragging: { kind: 'section'; id: string } | { kind: 'block'; index: number } | null;
   playing: boolean;
   /** Play loops the section being edited, or plays the whole arrangement once. */
   playMode: 'section' | 'song';
@@ -573,6 +634,7 @@ interface UiStore {
   loopBar: boolean;
   step: number; // playhead step in the section being edited, -1 when it isn't the one playing
   songStep: number; // playhead step in the whole song (song mode), -1 otherwise
+  songCursor: number; // where the song starts when you press Play (set by clicking the song timeline)
   viewBar: number; // which bar the grid shows
   selectedSlot: number; // chord being edited
   melodyId: string; // melody being edited (MAIN_MELODY or an added melody's id)
@@ -585,11 +647,13 @@ interface UiStore {
 
 export const useUi = create<UiStore>((set) => ({
   view: 'editor',
+  dragging: null,
   playing: false,
   playMode: 'section',
   loopBar: false,
   step: -1,
   songStep: -1,
+  songCursor: 0,
   viewBar: 0,
   selectedSlot: 0,
   melodyId: MAIN_MELODY,

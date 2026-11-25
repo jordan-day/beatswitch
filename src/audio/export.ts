@@ -21,7 +21,10 @@ export const songDuration = (p: Project) => songSteps(p) * stepSeconds(p.bpm);
 /** Render offline (faster than real time): `steps` 16th notes, each played by `play`. */
 async function render(p: Project, steps: number, play: (g: Graph, step: number, time: number) => void, fades: boolean) {
   await loadProjectBuiltins(p);
-  await Promise.all(allDrums(p).map((d) => d.track.sound).flatMap((s) => (s.kind === 'user' ? [loadSample(s.id)] : [])));
+  await Promise.all([
+    ...allDrums(p).map((d) => d.track.sound).flatMap((s) => (s.kind === 'user' ? [loadSample(s.id)] : [])),
+    ...(p.sample ? [loadSample(p.sample.id)] : []),
+  ]);
   const seconds = steps * stepSeconds(p.bpm) + TAIL_SECONDS;
 
   const rendered = await Tone.Offline(

@@ -29,6 +29,9 @@ export function Slider(props: {
         max={max}
         step={step}
         value={props.value}
+        // inline, the track takes the room left after the label (a range input's default width
+        // would otherwise spill past the slider's box and under whatever sits next to it)
+        className={props.inline ? 'flex-1 min-w-0' : undefined}
         style={props.color ? ({ '--thumb': props.color } as React.CSSProperties) : undefined}
         onChange={(e) => props.onChange(Number(e.target.value))}
       />

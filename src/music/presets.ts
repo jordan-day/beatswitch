@@ -134,6 +134,7 @@ export function buildPreset(index: number): Project {
     melody: { sound: p.melodySound ?? 'musicbox', octave: 4, notes: melody, volume: 0.6, mute: false },
     extraDrums: [],
     extraMelodies: [],
+    sample: null,
     fx: { lofi: p.lofi, ...lofiMacro(p.lofi) },
     ...demoSong(),
   };

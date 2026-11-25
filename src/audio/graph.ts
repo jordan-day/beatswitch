@@ -18,6 +18,9 @@ import { getInstrument, getKitBuffer, kitSamplePath, loadBuiltins } from './buil
 import { buildTimeline, FADE_IN_BARS, FADE_OUT_BARS, locate, type Part } from '../state/song';
 import { allDrums, allMelodies, MAIN_MELODY } from '../state/tracks';
 
+/** Playback speed for a pitch shift in semitones (like a record: higher is also faster). */
+export const sampleRate = (semitones: number) => Math.pow(2, semitones / 12);
+
 const toDb = (v: number) => (v <= 0.001 ? -Infinity : Tone.gainToDb(v));
 
 /** Level of each recorded kit drum, so the acoustic kit sits at about the same loudness as the synth kits. */
@@ -105,6 +108,10 @@ export class Graph {
   private bass: Tone.MonoSynth | null = null;
   private bassKey = '';
   private bassVol = new Tone.Volume(0);
+  /** The song's sample: one player for the file, retriggered at each hit. */
+  private sampler: Tone.Player | null = null;
+  private samplerKey = '';
+  private sampleVol = new Tone.Volume(0);
   private lastCrunch = -1;
 
   /** Called when a row's imported sample isn't available (it falls back to the built-in kit). */
@@ -123,6 +130,7 @@ export class Graph {
 
     this.keysVol.chain(this.wobble, this.input);
     this.bassVol.connect(this.input);
+    this.sampleVol.connect(this.input);
   }
 
   /** Wait for async setup (reverb impulse response). */
@@ -214,6 +222,18 @@ export class Graph {
       this.bassKey = p.bass.sound;
     }
     this.bassVol.volume.value = !p.bass.enabled ? -Infinity : toDb(p.bass.volume);
+
+    // the sample: a new player when the file changes (or once it has loaded); none while it's missing
+    const sm = p.sample;
+    const buf = sm ? this.getBuffer(sm.id) : undefined;
+    const key = sm && buf ? sm.id : '';
+    if (key !== this.samplerKey) {
+      this.sampler?.dispose();
+      this.sampler = buf ? new Tone.Player({ url: new Tone.ToneAudioBuffer(buf), fadeIn: 0.004, fadeOut: 0.02 }).connect(this.sampleVol) : null;
+      this.samplerKey = key;
+    }
+    if (sm && this.sampler) this.sampler.playbackRate = sampleRate(sm.pitch);
+    this.sampleVol.volume.value = !sm || sm.mute ? -Infinity : toDb(sm.volume);
 
     this.applyFx(p.fx);
   }
@@ -311,6 +331,30 @@ export class Graph {
         }
       }
     }
+
+    // the sample: from each hit, its trimmed clip plays until it ends, the next hit, or the end of the loop
+    const sm = p.sample;
+    if (sm && this.sampler && !mute?.sample && sm.steps[step]) {
+      let n = 1;
+      while (step + n < total && !sm.steps[step + n]) n++;
+      const seconds = Math.min(sm.length / sampleRate(sm.pitch), n * sd);
+      this.playSample(sm.start, seconds, time);
+    }
+  }
+
+  /** Start the sample's clip at `offset` (seconds into the file) and stop it `seconds` later. */
+  private playSample(offset: number, seconds: number, time: number) {
+    const s = this.sampler;
+    if (!s?.loaded) return;
+    s.start(time, Math.min(offset, Math.max(0, s.buffer.duration - 0.01)));
+    s.stop(time + seconds);
+  }
+
+  /** Hear the sample's trimmed clip right now (the Sample editor's ▶ Preview). */
+  previewSample(p: Project) {
+    if (!p.sample) return;
+    this.sampler?.stop();
+    this.playSample(p.sample.start, p.sample.length / sampleRate(p.sample.pitch), Tone.now() + 0.02);
   }
 
   /** Play a chord right now (chord picker previews). */
@@ -411,6 +455,7 @@ export class Graph {
     this.keys?.voice.releaseAll();
     for (const m of this.melodies.values()) m.voice.releaseAll();
     this.bass?.triggerRelease();
+    this.sampler?.stop();
   }
 
   dispose() {
@@ -426,6 +471,8 @@ export class Graph {
       m.vol.dispose();
     }
     this.bass?.dispose();
+    this.sampler?.dispose();
+    this.sampleVol.dispose();
     [this.input, this.crushShaper, this.crushMix, this.filter, this.reverb, this.comp, this.limiter, this.master, this.songGain,
       this.wobble, this.crackle, this.crackleGain, this.keysVol, this.bassVol].forEach((n) => n.dispose());
   }

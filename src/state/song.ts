@@ -20,6 +20,8 @@ export interface SectionPatterns {
   extraDrums?: Record<string, Step[]>;
   /** Notes of the added melodies, by melody id. */
   extraMelodies?: Record<string, MelodyNote[]>;
+  /** Hits of the song's sample in this section (absent: none yet). */
+  sample?: boolean[];
 }
 
 export interface Section {
@@ -29,8 +31,8 @@ export interface Section {
   patterns?: SectionPatterns;
 }
 
-export type Part = 'drums' | 'bass' | 'chords' | 'melody';
-export const PARTS: Part[] = ['drums', 'bass', 'chords', 'melody'];
+export type Part = 'drums' | 'bass' | 'chords' | 'melody' | 'sample';
+export const PARTS: Part[] = ['drums', 'bass', 'chords', 'melody', 'sample'];
 
 export interface SongBlock {
   id: string;
@@ -48,7 +50,7 @@ export const FADE_IN_BARS = 2;
 export const FADE_OUT_BARS = 4;
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
-export const noMutes = (): Record<Part, boolean> => ({ drums: false, bass: false, chords: false, melody: false });
+export const noMutes = (): Record<Part, boolean> => ({ drums: false, bass: false, chords: false, melody: false, sample: false });
 
 export function extractPatterns(p: Project): SectionPatterns {
   return structuredClone({
@@ -59,10 +61,12 @@ export function extractPatterns(p: Project): SectionPatterns {
     melody: p.melody.notes,
     extraDrums: Object.fromEntries(p.extraDrums.map((d) => [d.id, d.steps])),
     extraMelodies: Object.fromEntries(p.extraMelodies.map((m) => [m.id, m.notes])),
+    ...(p.sample ? { sample: p.sample.steps } : {}),
   });
 }
 
 const emptySteps = (): Step[] => Array.from({ length: MAX_STEPS }, () => 0 as Step);
+export const emptyHits = (): boolean[] => Array.from({ length: MAX_STEPS }, () => false);
 
 /** Write a section's patterns into a project (in place). */
 export function applyPatterns(p: Project, s: SectionPatterns) {
@@ -78,6 +82,7 @@ export function applyPatterns(p: Project, s: SectionPatterns) {
   p.melody.notes = c.melody;
   for (const d of p.extraDrums) d.steps = c.extraDrums?.[d.id] ?? emptySteps();
   for (const m of p.extraMelodies) m.notes = c.extraMelodies?.[m.id] ?? [];
+  if (p.sample) p.sample.steps = c.sample ?? emptyHits();
 }
 
 /** The song structure every new project starts with: one section, played 4 times. */
@@ -108,6 +113,7 @@ export function sectionView(p: Project, sectionId: string): Project {
   const pt = s.patterns;
   view.extraDrums = p.extraDrums.map((d) => ({ ...d, steps: pt.extraDrums?.[d.id] ?? emptySteps() }));
   view.extraMelodies = p.extraMelodies.map((m) => ({ ...m, notes: pt.extraMelodies?.[m.id] ?? [] }));
+  view.sample = p.sample && { ...p.sample, steps: pt.sample ?? emptyHits() };
   return view;
 }
 

@@ -21,9 +21,23 @@ import {
 import { slotLength } from '../music/patterns';
 import { useProject, useUi, withUndo } from '../state/project';
 import { STEPS_PER_BAR, type ChordRhythm, type ChordSlot } from '../state/types';
-import { EditorHeader } from './EditorHeader';
+import { EditorHeader, SEGMENTED, segmentBtn, TOOL_BTN, ToolbarDivider } from './EditorHeader';
+import { TipsButton } from './TipsButton';
 import { MiniKeyboard } from './MiniKeyboard';
 import { ChordSoundControls } from './SoundControls';
+
+const b = (t: string) => <b className="text-cream-100">{t}</b>;
+
+/** What's behind the Chords editor's ? button. */
+const CHORD_TIPS: React.ReactNode[] = [
+  <>{b('Click a chord')} to pick it, then choose a new one from the ideas beside it.</>,
+  <>{b('Click keys')} on the keyboard to add or remove notes from the chord.</>,
+  <>
+    {b('Long')}, {b('Twice')} and {b('Bouncy')} change how the chords are played; {b('Custom')} lets you draw exactly when they play.
+  </>,
+  <>{b('4 or 8 chords')} sets how often the chord changes in the loop.</>,
+  <>{b('✨ Progressions')} fills every chord with a ready-made progression.</>,
+];
 
 /** The Chords editor: chord slots + the selected chord's notes on the left, "what to play" ideas on the right. */
 export function ChordPanel() {
@@ -38,22 +52,18 @@ export function ChordPanel() {
 
   return (
     <>
-      <EditorHeader>
-        <ChordSoundControls />
+      <EditorHeader sound={<ChordSoundControls />}>
         <RhythmPicker />
-        <ProgressionPicker />
-        <div className="flex rounded-lg bg-ink-700 p-0.5" title="How many chord changes per loop">
+        <div className={SEGMENTED} title="How many chord changes per loop" role="group" aria-label="Chords per loop">
           {([4, 8] as const).map((n) => (
-            <button
-              key={n}
-              className={'px-2.5 py-1 rounded-md text-xs font-bold transition ' + (count === n ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')}
-              onClick={() => setChordCount(n)}
-              aria-pressed={count === n}
-            >
+            <button key={n} className={segmentBtn(count === n)} onClick={() => setChordCount(n)} aria-pressed={count === n}>
               {n} chords
             </button>
           ))}
         </div>
+        <ToolbarDivider />
+        <ProgressionPicker />
+        <TipsButton title="Using the chords editor" label="Chords editor help" tips={CHORD_TIPS} />
       </EditorHeader>
 
       <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
@@ -130,23 +140,12 @@ function RhythmPicker() {
   const rhythm = useProject((s) => s.project.chords.rhythm);
   const setRhythm = useProject((s) => s.setRhythm);
   return (
-    <div className="flex items-center gap-1.5" role="group" aria-label="Chord rhythm">
-      <span className="label hidden xl:inline">Rhythm</span>
-      <div className="flex rounded-lg bg-ink-700 p-0.5">
-        {(Object.keys(RHYTHM_LABEL) as ChordRhythm[]).map((r) => (
-          <button
-            key={r}
-            className={
-              'px-2.5 py-1 rounded-md text-xs font-bold transition ' + (rhythm === r ? 'bg-cream-100 text-ink-950' : 'text-cream-300 hover:text-cream-100')
-            }
-            title={RHYTHM_LABEL[r].hint}
-            aria-pressed={rhythm === r}
-            onClick={() => setRhythm(r)}
-          >
-            {RHYTHM_LABEL[r].label}
-          </button>
-        ))}
-      </div>
+    <div className={SEGMENTED} role="group" aria-label="Chord rhythm">
+      {(Object.keys(RHYTHM_LABEL) as ChordRhythm[]).map((r) => (
+        <button key={r} className={segmentBtn(rhythm === r)} title={RHYTHM_LABEL[r].hint} aria-pressed={rhythm === r} onClick={() => setRhythm(r)}>
+          {RHYTHM_LABEL[r].label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -224,7 +223,7 @@ function ProgressionPicker() {
 
   return (
     <div ref={ref} className="relative">
-      <button className="btn text-xs" onClick={() => setOpen(!open)} aria-expanded={open} title="Fill all chords with a ready-made progression">
+      <button className={TOOL_BTN} onClick={() => setOpen(!open)} aria-expanded={open} title="Fill all chords with a ready-made progression">
         ✨ Progressions ▾
       </button>
       {open && (
@@ -263,7 +262,6 @@ function ProgressionPicker() {
               </div>
             );
           })}
-          <p className="text-xs text-cream-500 px-2 pt-1">Change the mood in the settings on the right for different progressions.</p>
         </div>
       )}
     </div>
@@ -318,7 +316,6 @@ function ChordEditor({ index }: { index: number }) {
       <div className="rounded-2xl bg-ink-900/60 border border-ink-600/60 p-3 flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="flex items-baseline gap-2 min-w-0">
-            <span className="label shrink-0">Chord {index + 1}</span>
             <span className="text-xl font-black leading-tight">{slot ? slot.symbol : 'Silent'}</span>
             <span className="text-xs text-cream-500 truncate">
               {slot ? `feels: ${chordFeel(slot.symbol, p.tonic, p.mood)}` : 'nothing plays here: pick a chord'}
@@ -343,10 +340,6 @@ function ChordEditor({ index }: { index: number }) {
         {slot && (
           <>
             <div>
-              <div className="flex flex-wrap items-baseline gap-2 mb-1">
-                <span className="label">Notes in this chord</span>
-                <span className="text-xs text-cream-500">click keys to add or remove notes</span>
-              </div>
               <MiniKeyboard
                 notes={notes}
                 rootPc={chordRoot(slot.symbol)}

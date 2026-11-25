@@ -1,4 +1,4 @@
-import { DRUM_ROWS, type DrumRow, type DrumTrack, type MelodyTrack, type Project } from './types';
+import { DRUM_ROWS, STEPS_PER_BAR, type DrumRow, type DrumTrack, type MelodyTrack, type Project } from './types';
 
 /**
  * Helpers that treat the built-in tracks and the ones you add the same way.
@@ -42,3 +42,27 @@ export const EXTRA_DRUM_COLORS = ['#f0b36b', '#d98ad9', '#8fd6b6', '#c9c97a'];
 
 export const melodyColor = (p: Project, id: string) =>
   MELODY_COLORS[Math.max(0, allMelodies(p).findIndex((m) => m.id === id)) % MELODY_COLORS.length];
+
+/** The sample's colour (lavender: distinct from every built-in part). */
+export const SAMPLE_COLOR = '#a7b5ff';
+
+/**
+ * Where the sample plays in a loop of `bars` bars: one clip per hit, `s` its first step and `l`
+ * how many steps it sounds for. A clip runs for its trimmed length (shorter when pitched up,
+ * longer when pitched down), but stops at the next hit or the end of the loop.
+ */
+export function sampleClips(p: Project): { s: number; l: number }[] {
+  const sm = p.sample;
+  if (!sm) return [];
+  const total = p.bars * STEPS_PER_BAR;
+  const stepSec = 60 / p.bpm / 4;
+  const natural = Math.max(1, Math.ceil(sm.length / Math.pow(2, sm.pitch / 12) / stepSec - 1e-6));
+  const out: { s: number; l: number }[] = [];
+  for (let s = 0; s < total; s++) {
+    if (!sm.steps[s]) continue;
+    let n = 1;
+    while (s + n < total && !sm.steps[s + n]) n++;
+    out.push({ s, l: Math.min(natural, n) });
+  }
+  return out;
+}

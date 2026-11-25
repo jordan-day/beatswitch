@@ -13,6 +13,12 @@ function replaceUserSamples(copy: Project): number {
       n++;
     }
   }
+  // the song's sample has no built-in stand-in, so it's left out (with its hits in every section)
+  if (copy.sample) {
+    copy.sample = null;
+    for (const s of copy.sections) delete s.patterns?.sample;
+    n++;
+  }
   return n;
 }
 

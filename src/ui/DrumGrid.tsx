@@ -4,8 +4,10 @@ import { useProject, useUi, withUndo } from '../state/project';
 import { drumTrack, EXTRA_DRUM_COLORS, isDrumRow } from '../state/tracks';
 import { DRUM_ROWS, MAX_EXTRA_DRUMS, STEPS_PER_BAR, SYNTH_KITS, type DrumRow, type ExtraDrum, type Project, type SynthKit } from '../state/types';
 import { useSamples } from './common';
-import { EditorHeader } from './EditorHeader';
+import { EditorHeader, ICON_BTN, TOOL_BTN } from './EditorHeader';
+import { Select, type SelectItem } from './Select';
 import { BeatSoundControls } from './SoundControls';
+import { TipsButton } from './TipsButton';
 
 type RowId = DrumRow | 'bass' | 'chords';
 const BASS_LABEL = ['', 'R', '5', '8'];
@@ -25,23 +27,22 @@ const ROW_INFO: Record<RowId, { label: string; hint: string; color: string; bg: 
   chords: { label: 'Chords', hint: 'When the chords play. Each hit rings until the next one.', color: '#8fb3e5', bg: 'bg-chord' },
 };
 
-// 🎙 = recorded sound (VCSL, public domain); the others are synthesized.
 const KIT_LABEL: Record<SynthKit, string> = {
-  acoustic: '🎙 Acoustic kit',
+  acoustic: 'Acoustic kit',
   dusty: 'Dusty kit',
   soft: 'Soft kit',
-  clap: '🎙 Clap',
-  shaker: '🎙 Shaker',
-  tambourine: '🎙 Tambourine',
+  clap: 'Clap',
+  shaker: 'Shaker',
+  tambourine: 'Tambourine',
 };
 
 type RowInfo = { label: string; hint: string; color: string };
 
 /** The recorded one-shots sound the same on any row; the full kits have a sound per kind of drum. */
 const ONE_SHOTS: SynthKit[] = ['clap', 'shaker', 'tambourine'];
-const FULL_KIT_NAMES: Partial<Record<SynthKit, string>> = { acoustic: '🎙 Acoustic', dusty: 'Dusty', soft: 'Soft' };
+const FULL_KIT_NAMES: Partial<Record<SynthKit, string>> = { acoustic: 'Acoustic', dusty: 'Dusty', soft: 'Soft' };
 
-/** Name and colour of a drum row you added: its sound (e.g. "🎙 Shaker", "Soft snare", or your sample's name). */
+/** Name and colour of a drum row you added: its sound (e.g. "Shaker", "Soft snare", or your sample's name). */
 function extraInfo(p: Project, d: ExtraDrum): RowInfo {
   const color = EXTRA_DRUM_COLORS[Math.max(0, p.extraDrums.indexOf(d)) % EXTRA_DRUM_COLORS.length];
   const s = d.sound;
@@ -53,6 +54,18 @@ function extraInfo(p: Project, d: ExtraDrum): RowInfo {
         : `${FULL_KIT_NAMES[s.id] ?? ''} ${ROW_INFO[d.voice].label.toLowerCase()}`.trim();
   return { label, color, hint: 'A drum you added. Pick its sound below, or drop a .wav/.mp3 on it.' };
 }
+
+const key = (k: string) => <b className="text-cream-100">{k}</b>;
+
+/** What's behind the Beat editor's ? button. */
+const BEAT_TIPS: React.ReactNode[] = [
+  <>Click a square to add a hit, again for a {key('louder')} hit, and again to remove it.</>,
+  <>
+    Bass squares cycle {key('R')} root → {key('5')} fifth → {key('8')} octave → off.
+  </>,
+  <>Drop a .wav or .mp3 on a drum's name to use your own sound.</>,
+  <>Press {key('＋')} under the drums to add another row.</>,
+];
 
 export function DrumGrid() {
   const project = useProject((s) => s.project);
@@ -72,25 +85,41 @@ export function DrumGrid() {
     }));
 
   const clear = (row: string, label: string) => withUndo(`Cleared ${label.toLowerCase()}`, () => clearRow(row));
+  // every drum row (built-in and added) and the bass, in one undo step
+  const clearBeat = () =>
+    useProject.getState().update((p) => {
+      for (const t of [...DRUM_ROWS.map((r) => p.drums[r]), ...p.extraDrums]) t.steps = t.steps.map(() => 0);
+      p.bass.steps = p.bass.steps.map(() => 0);
+    });
+  const hasHits =
+    [...DRUM_ROWS.map((r) => project.drums[r]), ...project.extraDrums].some((t) => t.steps.some(Boolean)) || project.bass.steps.some(Boolean);
   const canAdd = project.extraDrums.length < MAX_EXTRA_DRUMS;
 
   return (
     <>
-      <EditorHeader>
-        <BeatSoundControls />
+      <EditorHeader sound={<BeatSoundControls />}>
         {project.bars > 1 && (
-          <button className="btn text-xs" onClick={copyToAll} title="Copy this bar into every other bar">
+          <button className={TOOL_BTN} onClick={copyToAll} title="Copy this bar into every other bar">
             ⧉ Copy bar to all
           </button>
         )}
         <button
-          className="btn text-base px-2.5 py-1"
+          className={ICON_BTN}
           onClick={() => withUndo('New drum pattern 🎲', randomize)}
           title="Surprise me: make a random (but musical) drum pattern"
           aria-label="Random drum pattern"
         >
           🎲
         </button>
+        <button
+          className={TOOL_BTN}
+          onClick={() => withUndo('Beat cleared', clearBeat)}
+          disabled={!hasHits}
+          title="Remove every drum and bass hit (every bar)"
+        >
+          ✕ Clear beat
+        </button>
+        <TipsButton title="Using the beat editor" label="Beat editor help" tips={BEAT_TIPS} />
       </EditorHeader>
 
       {/* rows stretch to fill the editor on tall screens and shrink (to a minimum) on short ones */}
@@ -154,11 +183,6 @@ export function DrumGrid() {
           />
           <Playhead local={playStep - offset} />
           </div>
-          <p className="text-xs text-cream-500 mt-1 shrink-0 sticky left-0 max-w-[calc(100vw-3.5rem)]">
-            Click a square to add a hit, again for a <b className="text-cream-300">louder</b> hit, again to remove. Bass cycles{' '}
-            <b className="text-cream-300">R</b> root → <b className="text-cream-300">5</b> fifth → <b className="text-cream-300">8</b> octave →
-            off. Drop a .wav/.mp3 on a drum name to use your own sound, or press <b className="text-cream-300">＋</b> under the drums for another row.
-          </p>
         </div>
       </div>
     </>
@@ -206,10 +230,11 @@ function Row(props: {
         }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => {
-          e.preventDefault();
           setDrag(false);
+          if (!isDrum) return; // the bass (and chords) row doesn't take files: let the page add it as the sample
+          e.preventDefault();
           const f = e.dataTransfer.files[0];
-          if (f && isDrum) assign(f);
+          if (f) assign(f);
         }}
         title={info.hint}
       >
@@ -381,14 +406,31 @@ function KitSelect({ row, name, onPickFile }: { row: string; name: string; onPic
   const synthValue = (kit: SynthKit, voice?: DrumRow) => (extra && !ONE_SHOTS.includes(kit) ? `synth:${kit}:${voice}` : 'synth:' + kit);
   const value = track.sound.kind === 'synth' ? synthValue(track.sound.id, extra?.voice) : 'user:' + track.sound.id;
 
+  const items: SelectItem[] = [
+    ...(extra
+      ? [
+          { group: 'Recorded hits', options: ONE_SHOTS.map((k) => ({ value: synthValue(k), label: KIT_LABEL[k] })) },
+          ...SYNTH_KITS.filter((k) => !ONE_SHOTS.includes(k)).map((k) => ({
+            group: KIT_LABEL[k],
+            options: DRUM_ROWS.map((r) => ({ value: synthValue(k, r), label: `${FULL_KIT_NAMES[k]} ${ROW_INFO[r].label.toLowerCase()}` })),
+          })),
+        ]
+      : SYNTH_KITS.map((k) => ({ value: 'synth:' + k, label: KIT_LABEL[k] }))),
+    ...(track.sound.kind === 'user' && !samples.some((s) => s.id === track.sound.id)
+      ? [{ value, label: `${(track.sound as { name: string }).name} (missing)` }]
+      : []),
+    ...(samples.length ? [{ group: 'Your samples', options: samples.map((s) => ({ value: 'user:' + s.id, label: s.name })) }] : []),
+    { value: 'import', label: '＋ Import sample…' },
+  ];
+
   return (
-    <div className="flex items-center">
-      <select
+    <div className="flex items-center min-w-0">
+      <Select
+        bare
         aria-label={`${name} sound`}
-        className="bg-transparent text-xs text-cream-500 hover:text-cream-100 w-full truncate cursor-pointer rounded"
         value={value}
-        onChange={(e) => {
-          const v = e.target.value;
+        items={items}
+        onChange={(v) => {
           if (v === 'import') return fileRef.current?.click();
           const [kind, id, voice] = v.split(':');
           update((d) => {
@@ -404,47 +446,7 @@ function KitSelect({ row, name, onPickFile }: { row: string; name: string; onPic
             }
           });
         }}
-      >
-        {extra ? (
-          <>
-            <optgroup label="Recorded hits">
-              {ONE_SHOTS.map((k) => (
-                <option key={k} value={synthValue(k)}>
-                  {KIT_LABEL[k]}
-                </option>
-              ))}
-            </optgroup>
-            {SYNTH_KITS.filter((k) => !ONE_SHOTS.includes(k)).map((k) => (
-              <optgroup key={k} label={KIT_LABEL[k]}>
-                {DRUM_ROWS.map((r) => (
-                  <option key={r} value={synthValue(k, r)}>
-                    {FULL_KIT_NAMES[k]} {ROW_INFO[r].label.toLowerCase()}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </>
-        ) : (
-          SYNTH_KITS.map((k) => (
-            <option key={k} value={'synth:' + k}>
-              {KIT_LABEL[k]}
-            </option>
-          ))
-        )}
-        {track.sound.kind === 'user' && !samples.some((s) => s.id === track.sound.id) && (
-          <option value={value}>{(track.sound as { name: string }).name} (missing)</option>
-        )}
-        {samples.length > 0 && (
-          <optgroup label="Your samples">
-            {samples.map((s) => (
-              <option key={s.id} value={'user:' + s.id}>
-                {s.name}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        <option value="import">＋ Import sample…</option>
-      </select>
+      />
       <input
         ref={fileRef}
         type="file"

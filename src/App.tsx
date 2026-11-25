@@ -8,9 +8,12 @@ import { DrumGrid } from './ui/DrumGrid';
 import { ErrorBoundary } from './ui/ErrorBoundary';
 import { SettingsMenu } from './ui/Inspector';
 import { MelodyRoll } from './ui/MelodyRoll';
+import { SampleEditor } from './ui/SampleEditor';
+import { SongTimeline } from './ui/SongTimeline';
+import { SampleDropZone } from './ui/SampleImport';
 import { Overview } from './ui/Overview';
-import { ProjectMenu } from './ui/ProjectMenu';
-import { SectionChips, SongEditor } from './ui/SongEditor';
+import { BeatName, ProjectMenu } from './ui/ProjectMenu';
+import { DragLayer, SectionChips } from './ui/Arrangement';
 import { Transport } from './ui/Transport';
 
 const TOUR_KEY = 'beatswitch:tour-done';
@@ -40,7 +43,7 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open the Song tab to add sections (Intro, Verse, Chorus…) and line them up. Set Loop to Song at the top and press ▶ to hear it all.'],
+    ['🎼', 'Build a song', 'Add sections (Intro, Verse, Chorus…) with ＋ New, then drag them onto the Song row to line them up. Set Loop to Song at the top and press ▶ to hear it all.'],
     ['📼', 'Set the vibe', 'Open ⚙ at the top to pick a mood and key and turn up the Lo-fi knob. Each editor tab has its own sound choices.'],
   ];
   return (
@@ -69,7 +72,7 @@ function HelpOverlay() {
           ))}
         </ol>
         <div className="text-xs text-cream-500 mt-4">
-          Shortcuts: <b>Space</b> play/stop · <b>1 2 3</b> beat/chords/melody · <b>4</b> song · <b>Ctrl+Z</b> undo. Everything saves in this browser automatically.
+          Shortcuts: <b>Space</b> play/stop · <b>1 2 3</b> beat/chords/melody · right-click a section to rename it · click a song block for its settings · <b>Ctrl+Z</b> undo. Everything saves in this browser automatically.
         </div>
         <button className="btn-primary mt-4 w-full" onClick={close} autoFocus>
           Let's go
@@ -130,49 +133,33 @@ function FloatingPlay() {
   );
 }
 
-/** The toolbar under the header: switch between editing a section and arranging the song, and pick the section to edit. */
+/** The toolbar under the header: pick the section to edit (right-click a chip for more). */
 function Toolbar() {
-  const view = useUi((s) => s.view);
-  const tab = (active: boolean) =>
-    'px-4 py-1.5 rounded-lg text-sm font-extrabold transition ' +
-    (active ? 'bg-ink-600 text-cream-100 shadow' : 'text-cream-500 hover:text-cream-100');
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 shrink-0">
-      <div role="tablist" aria-label="View" className="flex rounded-xl bg-ink-800/80 border border-ink-600/60 p-1 shrink-0">
-        <button role="tab" aria-selected={view === 'editor'} className={tab(view === 'editor')} onClick={() => showView('editor')} title="Edit a section's beat, chords and melody">
-          Section
-        </button>
-        <button
-          role="tab"
-          aria-selected={view === 'song'}
-          className={tab(view === 'song')}
-          onClick={() => showView('song')}
-          title="Line up your sections into a full song (key 4)"
-        >
-          Song
-        </button>
-      </div>
-      {view === 'editor' && <SectionChips />}
+      <SectionChips />
     </div>
   );
 }
 
 function Editor() {
   const track = useUi((s) => s.track);
+  // the Sample tab only exists while the song has a sample (after removing it, Beat shows instead)
+  const hasSample = useProject((s) => !!s.project.sample);
   return (
     <section className="card p-3 sm:p-4 flex flex-col min-h-[26rem] lg:flex-1" aria-label="Editor">
       {/* keyed by tab, so switching tabs also clears a crashed editor */}
-      <ErrorBoundary key={track} name={`${{ beat: 'Beat', chords: 'Chords', melody: 'Melody' }[track]} editor`}>
-        {track === 'beat' && <DrumGrid />}
+      <ErrorBoundary key={track} name={`${{ beat: 'Beat', chords: 'Chords', melody: 'Melody', sample: 'Sample' }[track]} editor`}>
+        {(track === 'beat' || (track === 'sample' && !hasSample)) && <DrumGrid />}
         {track === 'chords' && <ChordPanel />}
         {track === 'melody' && <MelodyRoll />}
+        {track === 'sample' && hasSample && <SampleEditor />}
       </ErrorBoundary>
     </section>
   );
 }
 
 export default function App() {
-  const view = useUi((s) => s.view);
   // Load a shared beat from the URL (#b=...), once.
   useEffect(() => {
     if (window.location.hash.startsWith('#b=')) {
@@ -186,12 +173,13 @@ export default function App() {
     useSamples.getState().refresh();
   }, []);
 
-  // Keyboard: Space = play/stop, 1/2/3 = beat/chords/melody editors, 4 = song arrangement, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
+  // Keyboard: Space = play/stop, 1/2/3 = beat/chords/melody editors, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       const typing = el.tagName === 'INPUT' && (el as HTMLInputElement).type === 'text';
-      if (typing || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return;
+      // dropdowns (ours are role="combobox") use the keys themselves: arrows, Space, letters
+      if (typing || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.closest?.('[role=combobox]')) return;
       const ui = useUi.getState();
       if (e.key === 'Escape' && ui.helpOpen) return closeHelp();
       if (ui.helpOpen || document.querySelector('[role=dialog][aria-modal=true]')) return;
@@ -201,8 +189,6 @@ export default function App() {
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && TRACK_KEYS[e.key]) {
         showView('editor');
         ui.set({ track: TRACK_KEYS[e.key] });
-      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '4') {
-        showView('song');
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? useProject.getState().redo() : useProject.getState().undo();
@@ -226,7 +212,9 @@ export default function App() {
           </span>
         </div>
         <Transport />
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* after undo/redo: the song's name, then settings, then the ☰ menu */}
+        <div className="ml-auto flex items-center gap-2 min-w-0">
+          <BeatName />
           <SettingsMenu />
           <ProjectMenu />
         </div>
@@ -235,24 +223,22 @@ export default function App() {
       <div className="flex-1 min-h-0 grid gap-2">
         <main className="flex flex-col gap-2 min-h-0 min-w-0 lg:overflow-y-auto">
           <Toolbar />
-          {view === 'song' ? (
-            <ErrorBoundary name="song arrangement">
-              <SongEditor />
-            </ErrorBoundary>
-          ) : (
-            <>
-              <ErrorBoundary name="section overview">
-                <Overview />
-              </ErrorBoundary>
-              <Editor />
-            </>
-          )}
+          {/* the whole song, above the section (Arrange opens the song's blocks) */}
+          <ErrorBoundary name="song">
+            <SongTimeline />
+          </ErrorBoundary>
+          <ErrorBoundary name="section overview">
+            <Overview />
+          </ErrorBoundary>
+          <Editor />
         </main>
       </div>
 
       <FloatingPlay />
       <HelpOverlay />
       <Toast />
+      <SampleDropZone />
+      <DragLayer />
     </div>
   );
 }

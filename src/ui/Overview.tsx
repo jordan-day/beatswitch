@@ -1,17 +1,23 @@
 import { slotLength } from '../music/patterns';
 import { useProject, useUi, type Track } from '../state/project';
 import { sectionColor } from '../state/song';
-import { allMelodies, melodyColor } from '../state/tracks';
+import { allMelodies, melodyColor, SAMPLE_COLOR, sampleClips } from '../state/tracks';
 import { DRUM_ROWS, MELODY_ROWS, STEPS_PER_BAR } from '../state/types';
+import { Select } from './Select';
+import { useSampleBuffer, Wave } from './SampleWave';
 
 const DRUM_COLORS = ['#e8916b', '#e6c27a', '#9ccf9a', '#7fc4c9', '#b6a2e0'];
 
-const LANES: { id: 'drums' | 'bass' | 'chords' | 'melody'; track: Track; label: string; icon: string }[] = [
+const EDITOR_NAME: Record<Track, string> = { beat: 'Beat', chords: 'Chords', melody: 'Melody', sample: 'Sample' };
+
+const LANES: { id: 'drums' | 'bass' | 'chords' | 'melody' | 'sample'; track: Track; label: string; icon: string }[] = [
   { id: 'drums', track: 'beat', label: 'Drums', icon: '🥁' },
   { id: 'bass', track: 'beat', label: 'Bass', icon: '🎸' },
   { id: 'chords', track: 'chords', label: 'Chords', icon: '🎹' },
   { id: 'melody', track: 'melody', label: 'Melody', icon: '🎵' },
 ];
+/** Only shown when the song has a sample. */
+const SAMPLE_LANE = { id: 'sample' as const, track: 'sample' as Track, label: 'Sample', icon: '💿' };
 
 /**
  * The whole loop at a glance: one compact lane per part, with the playhead running across.
@@ -35,12 +41,12 @@ export function Overview() {
         {/* lane labels (the open editor's lanes are highlighted) */}
         <div className="w-24 shrink-0 flex flex-col gap-1">
           <SectionSwitcher />
-          {LANES.map((l) => (
+          {(p.sample ? [...LANES, SAMPLE_LANE] : LANES).map((l) => (
             <button
               key={l.id}
               onClick={() => set({ track: l.track })}
               aria-pressed={track === l.track}
-              title={`Open the ${{ beat: 'Beat', chords: 'Chords', melody: 'Melody' }[l.track]} editor`}
+              title={`Open the ${EDITOR_NAME[l.track]} editor`}
               className={
                 'h-6 rounded-lg px-2 text-sm font-bold flex items-center gap-1.5 text-left transition ' +
                 (track === l.track ? 'bg-ink-600 text-cream-100' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-700')
@@ -163,6 +169,8 @@ export function Overview() {
             </div>
           </Lane>
 
+          {p.sample && <SampleLane active={track === 'sample'} total={total} />}
+
           {/* bar lines + playhead */}
           <div className="pointer-events-none absolute left-0 right-0 top-6 bottom-0">
             {Array.from({ length: p.bars - 1 }, (_, b) => (
@@ -189,19 +197,43 @@ function SectionSwitcher() {
   return (
     <div className="h-5 flex items-center gap-1" title={playingOther ? 'The song is playing another section right now' : 'Section you are editing'}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: sectionColor(p, p.activeSection) }} />
-      <select
-        className="bg-transparent text-xs font-extrabold uppercase tracking-wide text-cream-100 min-w-0 w-full cursor-pointer rounded"
+      <Select
+        bare
+        className="!text-cream-100 font-extrabold uppercase tracking-wide"
         value={p.activeSection}
-        onChange={(e) => switchSection(e.target.value)}
+        onChange={switchSection}
         aria-label="Section you are editing"
-      >
-        {p.sections.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+        items={p.sections.map((s) => ({ value: s.id, label: s.name }))}
+      />
     </div>
+  );
+}
+
+/** The sample's clips: each starts at a hit and is as wide as it actually plays, with its waveform inside. */
+function SampleLane({ active, total }: { active: boolean; total: number }) {
+  const p = useProject((s) => s.project);
+  const sm = p.sample!;
+  const buf = useSampleBuffer(sm.id);
+  const stepSec = 60 / p.bpm / 4;
+  const rate = Math.pow(2, sm.pitch / 12);
+  return (
+    <Lane active={active} dim={sm.mute}>
+      <div className="relative h-full">
+        {sampleClips(p).map((c) => (
+          <div
+            key={c.s}
+            className="absolute top-0.5 bottom-0.5 rounded-[4px] overflow-hidden border-l-2"
+            style={{ left: `${(c.s / total) * 100}%`, width: `${(c.l / total) * 100}%`, borderColor: SAMPLE_COLOR, background: SAMPLE_COLOR + '38' }}
+            title={`${sm.name}: plays from step ${(c.s % 16) + 1} of bar ${Math.floor(c.s / 16) + 1}`}
+          >
+            {buf && (
+              <Wave buf={buf} start={sm.start} length={Math.min(sm.length, c.l * stepSec * rate)} bars={Math.max(8, c.l * 3)} color={SAMPLE_COLOR} className="w-full h-full opacity-80" />
+            )}
+          </div>
+        ))}
+        {buf === null && <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-kick">File missing</span>}
+      </div>
+    </Lane>
   );
 }
 

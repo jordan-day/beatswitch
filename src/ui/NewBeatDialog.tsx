@@ -6,6 +6,7 @@ import { emptyProject } from '../music/presets';
 import { BPM_MAX, BPM_MIN, DRUM_ROWS, FULL_KITS, KEYS_SOUNDS, MOODS, type KeysSound, type Mood, type Project, type SynthKit } from '../state/types';
 import { Slider } from './common';
 import { describeLofi } from './LofiPanel';
+import { Select } from './Select';
 import { KEYS_LABEL, KIT_LABEL } from './SoundControls';
 
 /** Mood-flavoured defaults, so picking a mood already moves tempo, swing and vibe toward it. */
@@ -190,13 +191,12 @@ export function NewBeatDialog({ onCreate, onClose }: { onCreate: (p: Project) =>
                   <span className="font-bold">Key</span>
                   <span className="block text-xs text-cream-500">How high or low it sits. Any key sounds fine!</span>
                 </span>
-                <select className="select" value={tonic} onChange={(e) => change({ tonic: e.target.value }, 'chords')}>
-                  {TONICS.map((t) => (
-                    <option key={t} value={t}>
-                      {keyLabel(t, mood)}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Key"
+                  value={tonic}
+                  items={TONICS.map((t) => ({ value: t, label: keyLabel(t, mood) }))}
+                  onChange={(v) => change({ tonic: v }, 'chords')}
+                />
               </label>
             </>
           )}
@@ -261,23 +261,21 @@ export function NewBeatDialog({ onCreate, onClose }: { onCreate: (p: Project) =>
               <Heading title="Pick your sounds" hint="The chord instrument and the drum kit. You can swap them any time." />
               <label className="flex items-center justify-between gap-3">
                 <span className="font-bold">Chord sound</span>
-                <select className="select" value={keys} onChange={(e) => change({ keys: e.target.value as KeysSound }, 'chords')}>
-                  {KEYS_SOUNDS.map((k) => (
-                    <option key={k} value={k}>
-                      {KEYS_LABEL[k]}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Chord sound"
+                  value={keys}
+                  items={KEYS_SOUNDS.map((k) => ({ value: k, label: KEYS_LABEL[k] }))}
+                  onChange={(v) => change({ keys: v as KeysSound }, 'chords')}
+                />
               </label>
               <label className="flex items-center justify-between gap-3">
                 <span className="font-bold">Drum kit</span>
-                <select className="select" value={kit} onChange={(e) => change({ kit: e.target.value as SynthKit }, 'kit')}>
-                  {FULL_KITS.map((k) => (
-                    <option key={k} value={k}>
-                      {KIT_LABEL[k]}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  aria-label="Drum kit"
+                  value={kit}
+                  items={FULL_KITS.map((k) => ({ value: k, label: KIT_LABEL[k] }))}
+                  onChange={(v) => change({ kit: v as SynthKit }, 'kit')}
+                />
               </label>
               <button className="btn self-start" onClick={() => change({}, 'demo')}>
                 ▶ Hear it

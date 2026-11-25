@@ -7,6 +7,7 @@ import {
   KEYS_SOUNDS,
   MAX_EXTRA_DRUMS,
   MAX_EXTRA_MELODIES,
+  MAX_SAMPLE_SECONDS,
   MAX_STEPS,
   MELODY_ROWS,
   MELODY_SOUNDS,
@@ -19,6 +20,7 @@ import {
   type MelodyNote,
   type MelodyTone,
   type MelodyTrack,
+  type SampleTrack,
   type Project,
   type SoundRef,
   type Step,
@@ -115,6 +117,24 @@ function extraDrums(v: unknown): ExtraDrum[] {
   return out;
 }
 
+/** On/off hits, one per 16th note (a missing or broken list is all off). */
+const hits = (v: unknown): boolean[] => Array.from({ length: MAX_STEPS }, (_, i) => Array.isArray(v) && !!v[i]);
+
+/** The song's sample: its file must be one stored in this browser (an id like the drum samples'). */
+function sampleTrack(v: unknown): SampleTrack | null {
+  if (!isObj(v) || typeof v.id !== 'string' || !/^[a-f0-9]{8,64}$/.test(v.id)) return null;
+  return {
+    id: v.id,
+    name: typeof v.name === 'string' && v.name.trim() ? v.name.slice(0, 40) : 'Sample',
+    start: num(v.start, 0, 3600, 0),
+    length: num(v.length, 0.05, MAX_SAMPLE_SECONDS, 2),
+    pitch: Math.round(num(v.pitch, -12, 12, 0)),
+    volume: num(v.volume, 0, 1, 0.8),
+    mute: v.mute === true,
+    steps: hits(v.steps),
+  };
+}
+
 function extraMelodies(v: unknown, base: MelodyTrack): ExtraMelody[] {
   const out: ExtraMelody[] = [];
   for (const m of Array.isArray(v) ? v : []) {
@@ -146,6 +166,7 @@ export function parseProject(data: unknown): Project | null {
     melody: base.melody,
     extraDrums: [],
     extraMelodies: [],
+    sample: null,
     fx: base.fx,
     sections: base.sections,
     activeSection: base.activeSection,
@@ -193,6 +214,7 @@ export function parseProject(data: unknown): Project | null {
   if (isObj(data.melody)) p.melody = melodyTrack(data.melody, { ...base.melody, sound: 'musicbox' });
   p.extraDrums = extraDrums(data.extraDrums);
   p.extraMelodies = extraMelodies(data.extraMelodies, base.melody);
+  p.sample = sampleTrack(data.sample);
   if (isObj(data.fx)) {
     const f = data.fx;
     p.fx = {
@@ -232,6 +254,7 @@ function parsePatterns(raw: unknown): SectionPatterns | undefined {
   out.extraMelodies = Object.fromEntries(
     Object.entries(xm).filter(([id]) => trackId(id)).slice(0, MAX_EXTRA_MELODIES).map(([id, v]) => [id, melodyNotes(v)]),
   );
+  if (Array.isArray(raw.sample)) out.sample = hits(raw.sample);
   return out;
 }
 
@@ -275,6 +298,7 @@ function parseSong(data: Record<string, unknown>, p: Project) {
     if (!s.patterns) continue;
     s.patterns.extraDrums = Object.fromEntries(Object.entries(s.patterns.extraDrums ?? {}).filter(([id]) => drumIds.has(id)));
     s.patterns.extraMelodies = Object.fromEntries(Object.entries(s.patterns.extraMelodies ?? {}).filter(([id]) => melodyIds.has(id)));
+    if (!p.sample) delete s.patterns.sample;
   }
   p.fadeIn = data.fadeIn === true;
   p.fadeOut = data.fadeOut !== false;

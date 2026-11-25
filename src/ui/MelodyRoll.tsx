@@ -6,7 +6,7 @@ import { slotLength } from '../music/patterns';
 import { useProject, useUi, withUndo } from '../state/project';
 import { allMelodies, MAIN_MELODY, melodyColor, melodyName, melodyTrack } from '../state/tracks';
 import { MAX_EXTRA_MELODIES, MELODY_ROWS, STEPS_PER_BAR, type MelodyNote } from '../state/types';
-import { EditorHeader } from './EditorHeader';
+import { EditorHeader, ICON_BTN, TOOL_BTN } from './EditorHeader';
 import { MELODY_LABEL, MelodySoundControls } from './SoundControls';
 import { TipsButton } from './TipsButton';
 
@@ -22,6 +22,24 @@ type Drag =
 
 /** Notes copied with Ctrl+C / Ctrl+X, kept for the whole session so they can be pasted into any melody. */
 let clipboard: MelodyNote[] = [];
+
+const k = (t: string) => <b className="text-cream-100">{t}</b>;
+
+/** "How to edit", at the top of the Melody editor's ? panel. */
+const MELODY_HOW_TO: React.ReactNode[] = [
+  <>{k('Click')} to add a note, and drag right to hold it longer.</>,
+  <>{k('Drag a note')} to move it.</>,
+  <>Hover between two steps of a long note and {k('click the line')} to split it.</>,
+  <>Press a note's {k('✕')} (or {k('right-click')} it) to remove it.</>,
+  <>
+    {k('Hold Alt and drag')} to pick several notes, then use {k('Ctrl+C')}, {k('Ctrl+X')}, {k('Ctrl+V')} or {k('Delete')}.
+  </>,
+  <>Only notes from the key are shown.</>,
+  <>
+    <b className="text-chord">Blue squares</b> are in the chord playing at that moment, so they always fit.
+  </>,
+  <>Outlines are your other melodies.</>,
+];
 
 export function MelodyRoll() {
   const p = useProject((s) => s.project);
@@ -275,12 +293,10 @@ export function MelodyRoll() {
 
   return (
     <>
-      <EditorHeader>
-        <MelodySoundControls />
-        {m.mute && <span className="text-xs font-bold text-kick">🔇 {name} is muted</span>}
+      <EditorHeader sound={<MelodySoundControls />}>
         {p.bars > 1 && (
           <button
-            className="btn text-xs"
+            className={TOOL_BTN}
             onClick={() => withUndo(`Copied bar ${bar + 1} of ${name.toLowerCase()} into every bar`, () => copyMelodyBarToAll(bar, id))}
             disabled={!m.notes.some((n) => n.s < offset + STEPS_PER_BAR && n.s + n.l > offset)}
             title="Copy this bar's notes into every other bar (replaces what is there)"
@@ -289,7 +305,7 @@ export function MelodyRoll() {
           </button>
         )}
         <button
-          className="btn text-base px-2.5 py-1"
+          className={ICON_BTN}
           onClick={() => withUndo(`New ${name.toLowerCase()} 🎲`, () => randomizeMelody(id))}
           title={`Surprise me: make a random, gentle ${name.toLowerCase()}`}
           aria-label="Random melody"
@@ -297,7 +313,7 @@ export function MelodyRoll() {
           🎲
         </button>
         <button
-          className="btn text-xs"
+          className={TOOL_BTN}
           onClick={() => withUndo(`${name} cleared`, () => clearMelody(id))}
           title={`Remove all of ${name}'s notes (every bar)`}
           disabled={m.notes.length === 0}
@@ -328,10 +344,8 @@ export function MelodyRoll() {
             <>
               <b className="text-cream-100">Stuck?</b> Press 🎲 for a fresh idea and tweak it.
             </>,
-            <>
-              <b className="text-cream-100">Drag notes</b> to move them, and hover between steps of a long note to click-split it. <b className="text-cream-100">Hold Alt and drag</b> to pick several, then copy, cut and paste them with Ctrl+C, X and V.
-            </>,
           ]}
+          before={[{ title: 'How to edit', tips: MELODY_HOW_TO }]}
         />
       </EditorHeader>
       <MelodyPicker current={id} />
@@ -531,11 +545,6 @@ export function MelodyRoll() {
           </div>
         </div>
       </div>
-      <p className="text-xs text-cream-500 mt-2 shrink-0">
-        Click to add a note and drag right to hold it longer. Drag a note to move it, or hover between two steps of a long note and click the line to split it. Press a note's ✕ (or right-click it) to remove it. Hold Alt and drag to pick several notes, then use Ctrl+C, Ctrl+X, Ctrl+V or Delete. Only notes from the key are shown.{' '}
-        <span className="text-chord font-bold">Blue squares</span> are in the chord playing at that moment, so they always fit.
-        {allMelodies(p).length > 1 && ' Outlines are your other melodies.'}
-      </p>
     </>
   );
 }

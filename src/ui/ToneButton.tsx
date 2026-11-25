@@ -5,6 +5,7 @@ import { useProject } from '../state/project';
 import { melodyName, melodyTrack } from '../state/tracks';
 import type { MelodyTone } from '../state/types';
 import { Slider } from './common';
+import { ICON_BTN } from './EditorHeader';
 
 /** A word for a slider position: `cuts` are where the first and second words end. */
 const words = (v: number, cuts: [number, number], low: string, mid: string, high: string) => (v < cuts[0] ? low : v < cuts[1] ? mid : high);
@@ -49,7 +50,7 @@ export function ToneButton({ melodyId, instrument }: { melodyId: string; instrum
   return (
     <div ref={ref} className="relative">
       <button
-        className={'btn px-2.5 py-1 text-base ' + (open ? 'bg-ink-600' : '')}
+        className={ICON_BTN + ' ' + (open ? 'bg-ink-600' : '')}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="dialog"

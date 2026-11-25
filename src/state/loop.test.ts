@@ -21,6 +21,25 @@ describe('custom chord rhythm', () => {
     expect(pattern()).toBe('...#.......#....');
   });
 
+  it('after going from 4 to 8 chords, custom has a hit for every chord (not just every other one)', () => {
+    load(); // 4 chords, so the stored hits fit 4 chords
+    useProject.getState().setRhythm('stab');
+    useProject.getState().setChordCount(8);
+    useProject.getState().setRhythm('custom');
+    // Bouncy with 8 chords: 8 steps per chord, hits at 0, 3 and 5 of each, so both chords in a bar play
+    expect(pattern()).toBe('#..#.#..#..#.#..');
+  });
+
+  it('after going from 8 to 4 chords, custom follows the 4-chord rhythm', () => {
+    load();
+    useProject.getState().setChordCount(8);
+    useProject.getState().setRhythm('half');
+    useProject.getState().setRhythm('whole');
+    useProject.getState().setChordCount(4);
+    useProject.getState().setRhythm('custom');
+    expect(pattern()).toBe('#...............');
+  });
+
   it('a fresh custom pattern follows the rhythm you switch from', () => {
     load();
     useProject.getState().setRhythm('half');

@@ -4,6 +4,7 @@ import { previewKey } from '../audio/engine';
 import { useProject } from '../state/project';
 import { MOODS } from '../state/types';
 import { LofiPanel } from './LofiPanel';
+import { Select } from './Select';
 
 function Group(props: { title: string; children: React.ReactNode }) {
   return (
@@ -17,7 +18,7 @@ function Group(props: { title: string; children: React.ReactNode }) {
 /** The song-wide settings: key, mood and lo-fi. (Each part's sounds live in its own editor tab.) */
 function SettingsContent() {
   const p = useProject((s) => s.project);
-  const { setKeyMood } = useProject();
+  const { setKeyMood, setFade } = useProject();
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,21 +40,41 @@ function SettingsContent() {
         </div>
         <label className="flex items-center justify-between gap-2" title="How high or low the whole song sits. Any key sounds fine!">
           <span className="text-sm font-bold">Key</span>
-          <select className="select" value={p.tonic} onChange={(e) => {
-              setKeyMood(e.target.value, p.mood);
+          <Select
+            aria-label="Key"
+            value={p.tonic}
+            items={TONICS.map((t) => ({ value: t, label: keyLabel(t, p.mood) }))}
+            onChange={(v) => {
+              setKeyMood(v, p.mood);
               void previewKey();
-            }}>
-            {TONICS.map((t) => (
-              <option key={t} value={t}>
-                {keyLabel(t, p.mood)}
-              </option>
-            ))}
-          </select>
+            }}
+          />
         </label>
       </Group>
 
       <Group title="Vibe">
         <LofiPanel />
+      </Group>
+
+      <Group title="Song">
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            className={'chip text-xs px-2 ' + (p.fadeIn ? 'chip-on' : '')}
+            onClick={() => setFade('fadeIn', !p.fadeIn)}
+            aria-pressed={p.fadeIn}
+            title="The whole song fades in over its first 2 bars"
+          >
+            {p.fadeIn ? '✓ ' : ''}Fade in
+          </button>
+          <button
+            className={'chip text-xs px-2 ' + (p.fadeOut ? 'chip-on' : '')}
+            onClick={() => setFade('fadeOut', !p.fadeOut)}
+            aria-pressed={p.fadeOut}
+            title="The whole song fades out over its last 4 bars"
+          >
+            {p.fadeOut ? '✓ ' : ''}Fade out
+          </button>
+        </div>
       </Group>
     </div>
   );

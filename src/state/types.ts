@@ -100,6 +100,28 @@ export interface ExtraMelody extends MelodyTrack {
   id: string;
 }
 
+/**
+ * A clip from an audio file you imported, played from each hit for its trimmed length (or until
+ * the next hit). The file lives in this browser's storage; `id` points at it.
+ * The sound settings are song-wide; the hits are per section.
+ */
+export interface SampleTrack {
+  id: string;
+  name: string;
+  /** Where the clip starts in the file, in seconds. */
+  start: number;
+  /** How long the clip is, in seconds of the file. */
+  length: number;
+  /** Semitones up or down (-12..12); also changes speed, like a record. */
+  pitch: number;
+  volume: number;
+  mute: boolean;
+  /** Where the clip starts playing, one per 16th note. */
+  steps: boolean[];
+}
+/** Longest clip you can trim out, in seconds. */
+export const MAX_SAMPLE_SECONDS = 30;
+
 export const MAX_EXTRA_DRUMS = 4;
 export const MAX_EXTRA_MELODIES = 3;
 
@@ -143,6 +165,8 @@ export interface Project {
   extraDrums: ExtraDrum[];
   /** More melodies, each with its own instrument. Sound and volume are song-wide; notes are per section. */
   extraMelodies: ExtraMelody[];
+  /** Your own sample (one per song), or null when there isn't one. */
+  sample: SampleTrack | null;
   fx: FxSettings;
 
   // ---- song arrangement (see state/song.ts) ----

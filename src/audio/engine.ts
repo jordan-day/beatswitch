@@ -4,7 +4,7 @@ import { STEPS_PER_BAR, type ChordSlot, type Project } from '../state/types';
 import { allDrums } from '../state/tracks';
 import { getCachedBuffer, loadSample } from '../storage/samples';
 import { Graph, loadProjectBuiltins, stepSeconds, toToneSwing } from './graph';
-import { songSteps } from '../state/song';
+import { buildTimeline, locate, songSteps } from '../state/song';
 import { nextLoopStep, slotLength } from '../music/patterns';
 
 /**
@@ -58,6 +58,26 @@ function ensureSamples(p: Project) {
       });
     }
   }
+  const sm = p.sample;
+  if (sm && !getCachedBuffer(sm.id)) {
+    loadSample(sm.id).then((buf) => {
+      if (buf) graph?.apply(useProject.getState().project);
+      else if (!missingNoted.has(sm.id)) {
+        // e.g. a song opened in another browser: the file was never stored here
+        missingNoted.add(sm.id);
+        useUi.getState().notify(`The sample "${sm.name}" isn't saved in this browser, so it's silent. Pick its file again in the Sample tab.`);
+      }
+    });
+  }
+}
+const missingNoted = new Set<string>();
+
+/** Hear the sample's trimmed clip (the Sample editor's ▶ Preview). */
+export async function previewSample() {
+  const g = await ensureAudio();
+  const p = useProject.getState().project;
+  if (p.sample) await loadSample(p.sample.id).then(() => g.apply(useProject.getState().project));
+  g.previewSample(useProject.getState().project);
 }
 
 /** Browsers only allow audio after a click/keypress, so call this from event handlers. */
@@ -99,17 +119,20 @@ export async function play() {
   const songMode = useUi.getState().playMode === 'song';
   const startP = useProject.getState().project;
   if (songMode && songSteps(startP) === 0) {
-    useUi.getState().notify('The song is empty. Open the Song tab and use "Add to song" on a section.');
+    useUi.getState().notify('The song is empty. Drag a section onto the Song row, or press its ＋.');
     return;
   }
-  counter = 0;
+  // the song starts where the timeline's cursor is (the top, unless you clicked somewhere)
+  const total = songSteps(startP);
+  const cursor = songMode ? Math.min(Math.max(0, useUi.getState().songCursor), total - 1) : 0;
+  counter = cursor;
   followBar = followSlot = -1;
   let lastStep = -1;
   let ended = false;
   if (repeatId !== null) t.clear(repeatId);
   const startAt = Tone.now() + 0.05;
   g.resetFades();
-  if (songMode) g.scheduleFades(startP, startAt, songSteps(startP) * stepSeconds(startP.bpm));
+  if (songMode) g.scheduleFades(startP, startAt - cursor * stepSeconds(startP.bpm), total * stepSeconds(startP.bpm));
 
   repeatId = t.scheduleRepeat((time) => {
     const p = useProject.getState().project;
@@ -128,7 +151,10 @@ export async function play() {
       // end of the song: let the last notes ring out, then stop
       if (!ended) {
         ended = true;
-        Tone.getDraw().schedule(() => stop(), time + 1.5);
+        Tone.getDraw().schedule(() => {
+          stop();
+          useUi.getState().set({ songCursor: 0 }); // played to the end: next time, start from the top
+        }, time + 1.5);
       }
       return;
     }
@@ -159,6 +185,33 @@ export function stop() {
   useUi.getState().set({ playing: false, step: -1, songStep: -1 });
 }
 
+/**
+ * Move song playback to `step` (a 16th note of the whole song), from the song timeline.
+ * While the song plays it jumps there; when stopped, that's where Play will start. Either way the
+ * section at that spot opens in the editor, at that bar.
+ */
+export function seekSong(step: number) {
+  const p = useProject.getState().project;
+  const total = songSteps(p);
+  if (!total) return;
+  const s = Math.max(0, Math.min(total - 1, Math.round(step)));
+  const ui = useUi.getState();
+  ui.set({ songCursor: s });
+  if (ui.playing && ui.playMode === 'song' && graph) {
+    counter = s;
+    graph.silence(); // notes held from before the jump would hang on
+    const sd = stepSeconds(p.bpm);
+    graph.resetFades();
+    graph.scheduleFades(p, Tone.now() - s * sd, total * sd);
+    return;
+  }
+  // stopped: show the spot (the playhead waits there) and open that section at that bar
+  const at = locate(buildTimeline(p), s);
+  if (!at) return;
+  if (ui.view === 'editor' && at.seg.block.section !== p.activeSection) useProject.getState().followSection(at.seg.block.section);
+  useUi.getState().set({ viewBar: Math.floor(at.local / STEPS_PER_BAR) });
+}
+
 /** Switch between looping the section and playing the song (restarts if playing). */
 export async function setPlayMode(mode: 'section' | 'song') {
   const wasPlaying = useUi.getState().playing;
@@ -182,7 +235,7 @@ export async function setLoopMode(mode: LoopMode) {
 }
 
 /** Switch between the section editor and the song arrangement. */
-export function showView(view: 'editor' | 'song') {
+export function showView(view: 'editor') {
   useUi.getState().set({ view });
 }
 
