@@ -6,6 +6,7 @@ import { useProject, useUi } from '../state/project';
 import { formatTime, songSteps } from '../state/song';
 import { BeatName, ProjectMenu } from '../ui/ProjectMenu';
 import { BeatScreen, ChordsScreen, HowToScreen, MelodyScreen, SongScreen, VibeScreen } from './MobileScreens';
+import { MobileLanding } from './MobileLanding';
 import { newMobileSong } from './shape';
 
 /**
@@ -56,18 +57,20 @@ const store = {
 
 /**
  * Where to open: a wizard that was in progress resumes at its step (with the song you were making);
- * the very first visit starts the wizard with a fresh song; otherwise the tabs, with your last song.
+ * the very first visit opens the welcome page (its button starts the wizard with a fresh song);
+ * otherwise the tabs, with your last song.
  */
-function openingStep(): { step: number | null; fresh: boolean } {
+function openingStep(): { step: number | null; welcome: boolean } {
   const saved = Number(store.get(STEP_KEY));
-  if (store.get(STEP_KEY) !== null && saved >= 0 && saved < WIZARD.length) return { step: saved, fresh: false };
-  if (!store.get(SETUP_KEY)) return { step: 0, fresh: true };
-  return { step: null, fresh: false };
+  if (store.get(STEP_KEY) !== null && saved >= 0 && saved < WIZARD.length) return { step: saved, welcome: false };
+  if (!store.get(SETUP_KEY)) return { step: null, welcome: true };
+  return { step: null, welcome: false };
 }
 
 export function MobileApp() {
   const load = useProject((s) => s.load);
   const [opening] = useState(openingStep);
+  const [welcome, setWelcome] = useState(opening.welcome);
   const [wizard, setWizardState] = useState<number | null>(opening.step);
   const [tab, setTab] = useState<Screen>('beat');
   const screen: Screen = wizard !== null ? WIZARD[wizard].id : tab;
@@ -81,10 +84,6 @@ export function MobileApp() {
     load(newMobileSong());
     setWizard(0);
   };
-  useEffect(() => {
-    if (opening.fresh) startNewSong();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
   // No pop-ups during the wizard: they'd cover its Next button (and every step can simply be redone).
   // Any message is dropped as it comes in, so nothing old pops up when the wizard ends either.
   const toast = useUi((s) => s.toast);
@@ -106,6 +105,16 @@ export function MobileApp() {
     if (useUi.getState().playMode !== want) void setLoopMode(want);
     useUi.getState().set({ loopBar: false });
   }, [screen]);
+
+  if (welcome)
+    return (
+      <MobileLanding
+        onStart={() => {
+          setWelcome(false);
+          startNewSong();
+        }}
+      />
+    );
 
   return (
     <div className="h-[100dvh] flex flex-col bg-ink-950 text-cream-100">
