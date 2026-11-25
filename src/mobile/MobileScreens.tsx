@@ -142,17 +142,69 @@ export function BeatScreen({ autoFill }: { autoFill?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const toggle = (row: DrumRow | 'bass', i: number) => {
+  /** Turn one square on or off (in every bar). `key` merges a swipe into one undo step. */
+  const setPad = (row: DrumRow | 'bass', i: number, on: boolean, key?: string) => {
     ensureAudio();
     update((d) => {
-      const on = row === 'bass' ? d.bass.steps[i] : d.drums[row].steps[i];
       for (let b = 0; b < 4; b++) {
         const k = b * STEPS_PER_BAR + i;
-        if (row === 'bass') d.bass.steps[k] = on ? 0 : 1;
-        else d.drums[row].steps[k] = on ? 0 : 1;
+        if (row === 'bass') d.bass.steps[k] = on ? 1 : 0;
+        else d.drums[row].steps[k] = on ? 1 : 0;
       }
-    });
+    }, key);
   };
+  const toggle = (row: DrumRow | 'bass', i: number) => setPad(row, i, !value(row, i));
+
+  /**
+   * Touch handling for the pads. Taps are read straight from touch down/up (not `click`), so quick
+   * taps on neighbouring squares never merge into a double-tap on one square. Sliding sideways
+   * paints across a row; sliding up or down scrolls the page as usual.
+   */
+  const stroke = useRef<{ id: number; row: DrumRow | 'bass'; start: number; on: boolean; painted: Set<number>; key: string } | null>(null);
+  const padAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-pad]');
+    if (!el) return null;
+    const [row, i] = el.dataset.pad!.split(':');
+    return { row: row as DrumRow | 'bass', i: Number(i) };
+  };
+  const onPadDown = (e: React.PointerEvent, row: DrumRow | 'bass', i: number) => {
+    if (e.button !== 0) return;
+    // touch pointers are captured by the square they start on; release so moves reach the others
+    try {
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* not captured */
+    }
+    stroke.current = { id: e.pointerId, row, start: i, on: !value(row, i), painted: new Set(), key: `pads-${e.pointerId}-${e.timeStamp}` };
+  };
+  const onPadMove = (e: React.PointerEvent) => {
+    const st = stroke.current;
+    if (!st || st.id !== e.pointerId) return;
+    const pad = padAt(e.clientX, e.clientY);
+    if (!pad || pad.row !== st.row) return;
+    if (pad.i === st.start && st.painted.size === 0) return; // still on the first square
+    for (const i of [st.start, pad.i]) {
+      if (st.painted.has(i)) continue;
+      st.painted.add(i);
+      setPad(st.row, i, st.on, st.key);
+    }
+  };
+  const onPadUp = (e: React.PointerEvent) => {
+    const st = stroke.current;
+    if (!st || st.id !== e.pointerId) return;
+    stroke.current = null;
+    if (st.painted.size === 0) setPad(st.row, st.start, st.on); // a plain tap
+  };
+  // a swipe can end outside the row it started in
+  useEffect(() => {
+    const end = () => (stroke.current = null);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  }, []);
   const kit = FULL_KITS.find((k) => p.drums.kick.sound.kind === 'synth' && p.drums.kick.sound.id === k) ?? '';
 
   return (
@@ -184,16 +236,25 @@ export function BeatScreen({ autoFill }: { autoFill?: boolean }) {
             {r.key === 'bass' && <span className="text-xs text-cream-500">follows the chords</span>}
           </div>
           {/* 16 steps as two rows of 8, a beat (4 squares) per group */}
-          <div className="grid grid-cols-8 gap-1.5">
+          <div
+            className="grid grid-cols-8 gap-1.5 select-none [touch-action:pan-y] [-webkit-touch-callout:none]"
+            onPointerMove={onPadMove}
+            onPointerUp={onPadUp}
+            onPointerCancel={() => (stroke.current = null)}
+            onContextMenu={(e) => e.preventDefault()}
+          >
             {Array.from({ length: STEPS_PER_BAR }, (_, i) => {
               const on = !!value(r.key, i);
               return (
                 <button
                   key={i}
-                  onClick={() => toggle(r.key, i)}
+                  data-pad={`${r.key}:${i}`}
+                  onPointerDown={(e) => onPadDown(e, r.key, i)}
+                  // keyboard only: taps and clicks are handled by the pointer events above
+                  onClick={(e) => e.detail === 0 && toggle(r.key, i)}
                   aria-label={`${r.label} step ${i + 1}${on ? ' on' : ''}`}
                   aria-pressed={on}
-                  className={'h-10 rounded-lg transition active:scale-95 ' + (on ? '' : i % 4 === 0 ? 'bg-ink-600' : 'bg-ink-700') + (now === i ? ' ring-2 ring-cream-100/70' : '')}
+                  className={'h-10 rounded-lg transition-colors ' + (on ? '' : i % 4 === 0 ? 'bg-ink-600' : 'bg-ink-700') + (now === i ? ' ring-2 ring-cream-100/70' : '')}
                   style={on ? { background: r.color } : undefined}
                 />
               );
