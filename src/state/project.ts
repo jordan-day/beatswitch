@@ -11,6 +11,7 @@ import {
   MAX_EXTRA_DRUMS,
   MAX_EXTRA_MELODIES,
   MAX_STEPS,
+  MELODY_ROWS,
   MELODY_SOUNDS,
   type BassStep,
   type ChordRhythm,
@@ -54,6 +55,15 @@ interface ProjectStore {
   addNote: (n: MelodyNote, melody?: string) => void;
   resizeNote: (s: number, d: number, l: number, melody?: string) => void;
   removeNote: (s: number, d: number, melody?: string) => void;
+  /** Move a note to a new start step and pitch row (kept inside the loop; refused if it would land on another note). */
+  moveNote: (s: number, d: number, ns: number, nd: number, melody?: string) => void;
+  /** Move several notes together by `ds` steps and `dd` pitch rows. All or nothing: refused if any would leave the grid or land on another note. */
+  moveNotes: (keys: { s: number; d: number }[], ds: number, dd: number, melody?: string) => void;
+  removeNotes: (keys: { s: number; d: number }[], melody?: string) => void;
+  /** Add notes (e.g. pasted ones), replacing any they overlap on the same row. */
+  pasteNotes: (notes: MelodyNote[], melody?: string) => void;
+  /** Cut a note in two at step `at` (it must fall inside the note, after its first step). */
+  splitNote: (s: number, d: number, at: number, melody?: string) => void;
   clearMelody: (melody: string) => void;
   /** Add a drum row to the pad; returns its id ('' when the pad is full). */
   addDrum: () => string;
@@ -303,6 +313,66 @@ export const useProject = create<ProjectStore>((set, get) => ({
       note.l = Math.max(1, Math.min(l, p.bars * 16 - s));
       m.notes = m.notes.filter((x) => x === note || x.d !== d || x.s < s || x.s >= s + note.l);
     }, `melody-resize:${melody}:${s}:${d}`),
+
+  moveNote: (s, d, ns, nd, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      const note = m?.notes.find((x) => x.s === s && x.d === d);
+      if (!m || !note) return;
+      const s2 = Math.max(0, Math.min(ns, p.bars * 16 - note.l));
+      const d2 = Math.max(0, Math.min(nd, MELODY_ROWS - 1));
+      if (m.notes.some((x) => x !== note && x.d === d2 && x.s < s2 + note.l && x.s + x.l > s2)) return;
+      note.s = s2;
+      note.d = d2;
+    }, `melody-move:${melody}`),
+
+  moveNotes: (keys, ds, dd, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (!m) return;
+      const is = (n: MelodyNote) => keys.some((k) => k.s === n.s && k.d === n.d);
+      const moving = m.notes.filter(is);
+      const total = p.bars * 16;
+      const ok = moving.every((n) => {
+        const s2 = n.s + ds;
+        const d2 = n.d + dd;
+        return (
+          s2 >= 0 &&
+          s2 + n.l <= total &&
+          d2 >= 0 &&
+          d2 < MELODY_ROWS &&
+          !m.notes.some((x) => !is(x) && x.d === d2 && x.s < s2 + n.l && x.s + x.l > s2)
+        );
+      });
+      if (!ok) return;
+      for (const n of moving) {
+        n.s += ds;
+        n.d += dd;
+      }
+    }, `melody-move:${melody}`),
+
+  removeNotes: (keys, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (m) m.notes = m.notes.filter((n) => !keys.some((k) => k.s === n.s && k.d === n.d));
+    }),
+
+  pasteNotes: (notes, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (!m) return;
+      for (const n of notes) m.notes = m.notes.filter((x) => x.d !== n.d || x.s + x.l <= n.s || x.s >= n.s + n.l);
+      m.notes.push(...notes.map((n) => ({ ...n })));
+    }),
+
+  splitNote: (s, d, at, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      const note = m?.notes.find((x) => x.s === s && x.d === d);
+      if (!m || !note || at <= note.s || at >= note.s + note.l) return;
+      m.notes.push({ s: at, l: note.s + note.l - at, d });
+      note.l = at - note.s;
+    }),
 
   removeNote: (s, d, melody = MAIN_MELODY) =>
     get().update((p) => {

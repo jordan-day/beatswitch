@@ -40,7 +40,7 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open the 🎼 Song tab to add sections (Intro, Verse, Chorus…) and line them up. Press ▶ there to hear the whole song.'],
+    ['🎼', 'Build a song', 'Open the Song tab to add sections (Intro, Verse, Chorus…) and line them up. Press ▶ there to hear the whole song.'],
     ['📼', 'Set the vibe', 'Open ⚙ at the top to pick a mood and key and turn up the Lo-fi knob. Each editor tab has its own sound choices.'],
   ];
   return (
@@ -133,7 +133,6 @@ function FloatingPlay() {
 /** The toolbar under the header: switch between editing a section and arranging the song, and pick the section to edit. */
 function Toolbar() {
   const view = useUi((s) => s.view);
-  const blocks = useProject((s) => s.project.song.length);
   const tab = (active: boolean) =>
     'px-4 py-1.5 rounded-lg text-sm font-extrabold transition ' +
     (active ? 'bg-ink-600 text-cream-100 shadow' : 'text-cream-500 hover:text-cream-100');
@@ -141,7 +140,7 @@ function Toolbar() {
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 shrink-0">
       <div role="tablist" aria-label="View" className="flex rounded-xl bg-ink-800/80 border border-ink-600/60 p-1 shrink-0">
         <button role="tab" aria-selected={view === 'editor'} className={tab(view === 'editor')} onClick={() => showView('editor')} title="Edit a section's beat, chords and melody">
-          🎛 Edit
+          Section
         </button>
         <button
           role="tab"
@@ -150,8 +149,7 @@ function Toolbar() {
           onClick={() => showView('song')}
           title="Line up your sections into a full song (key 4)"
         >
-          🎼 Song
-          <span className="ml-1.5 text-xs font-bold text-cream-500">{blocks}</span>
+          Song
         </button>
       </div>
       {view === 'editor' && <SectionChips />}

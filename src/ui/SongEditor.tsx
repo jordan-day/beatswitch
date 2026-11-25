@@ -41,7 +41,7 @@ export function SongEditor() {
         <div>
           <h2 className="text-base font-extrabold">Sections</h2>
           <p className="text-xs text-cream-500">
-            Each section is a loop you build in the Edit tab. Click one to select it, double-click to edit it, or drag it into the song below.
+            Each section is a loop you build in the Section tab. Click one to select it, double-click to edit it, or drag it into the song below.
           </p>
         </div>
         <div className="flex flex-wrap gap-2 min-w-0">
