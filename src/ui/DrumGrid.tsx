@@ -225,7 +225,7 @@ function Row(props: {
               <KitSelect row={props.row} name={info.label} onPickFile={assign} />
               {props.onRemove && (
                 <button
-                  className="shrink-0 text-[11px] text-cream-500 hover:text-cream-100 rounded px-0.5"
+                  className="shrink-0 text-xs text-cream-500 hover:text-cream-100 rounded px-0.5"
                   onClick={props.onRemove}
                   title={`Remove ${info.label} from the pad (in every section)`}
                   aria-label={`Remove ${info.label}`}
@@ -299,14 +299,14 @@ function Playhead({ local }: { local: number }) {
 function BeatRuler({ bar, playStep }: { bar: number; playStep: number }) {
   return (
     <div className="flex items-end gap-2 shrink-0 h-4" aria-hidden="true">
-      <div className="w-36 sm:w-48 shrink-0 text-[10px] font-bold text-cream-500 pl-2 uppercase tracking-wider">Bar {bar + 1}</div>
+      <div className="w-36 sm:w-48 shrink-0 text-xs font-bold text-cream-500 pl-2 uppercase tracking-wider">Bar {bar + 1}</div>
       <div className="grid gap-1 flex-1" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
         {Array.from({ length: 16 }, (_, i) => (
           <div
             key={i}
             className={
               'text-center leading-none ' +
-              (i % 4 === 0 ? 'text-[11px] font-extrabold ' : 'text-[9px] ') +
+              (i % 4 === 0 ? 'text-xs font-extrabold ' : 'text-xs ') +
               (Math.floor(playStep / 4) === Math.floor(i / 4) && playStep >= 0 ? 'text-cream-100' : 'text-cream-500')
             }
           >

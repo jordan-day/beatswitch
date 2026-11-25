@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { togglePlay } from './audio/engine';
+import { showView, togglePlay } from './audio/engine';
 import { useProject, useUi, type Track } from './state/project';
 import { decodeProject } from './storage/share';
 import { ChordPanel } from './ui/ChordPanel';
@@ -10,7 +10,7 @@ import { SettingsMenu } from './ui/Inspector';
 import { MelodyRoll } from './ui/MelodyRoll';
 import { Overview } from './ui/Overview';
 import { ProjectMenu } from './ui/ProjectMenu';
-import { SectionPicker, SongEditor } from './ui/SongEditor';
+import { SectionChips, SongEditor } from './ui/SongEditor';
 import { Transport } from './ui/Transport';
 
 const TOUR_KEY = 'beatswitch:tour-done';
@@ -40,8 +40,8 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open the 🎼 Song arrangement tab to add sections (Intro, Verse, Chorus…) and line them up. Next to ▶, pick "Whole song" to hear it all.'],
-    ['📼', 'Set the vibe', 'On the right: pick a mood and key, and turn up the Lo-fi knob.'],
+    ['🎼', 'Build a song', 'Open the 🎼 Song tab to add sections (Intro, Verse, Chorus…) and line them up. Press ▶ there to hear the whole song.'],
+    ['📼', 'Set the vibe', 'Open ⚙ at the top to pick a mood and key and turn up the Lo-fi knob. Each editor tab has its own sound choices.'],
   ];
   return (
     <div
@@ -130,31 +130,31 @@ function FloatingPlay() {
   );
 }
 
-/** The two views: editing a section, or arranging sections into the whole song. */
-function ViewTabs() {
+/** The toolbar under the header: switch between editing a section and arranging the song, and pick the section to edit. */
+function Toolbar() {
   const view = useUi((s) => s.view);
-  const set = useUi((s) => s.set);
-  const p = useProject((s) => s.project);
-  const section = p.sections.find((s) => s.id === p.activeSection)?.name ?? 'Section';
+  const blocks = useProject((s) => s.project.song.length);
   const tab = (active: boolean) =>
-    'flex items-center gap-2 px-3.5 py-1 rounded-xl text-[13px] font-extrabold transition ' +
-    (active ? 'bg-ink-800 text-cream-100 border border-ink-600 shadow' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-800/60');
+    'px-4 py-1.5 rounded-lg text-sm font-extrabold transition ' +
+    (active ? 'bg-ink-600 text-cream-100 shadow' : 'text-cream-500 hover:text-cream-100');
   return (
-    <div role="tablist" aria-label="View" className="flex gap-1 shrink-0">
-      <button role="tab" aria-selected={view === 'editor'} className={tab(view === 'editor')} onClick={() => set({ view: 'editor' })}>
-        🎛 Editor
-        <span className="text-xs font-bold text-cream-500">· {section}</span>
-      </button>
-      <button
-        role="tab"
-        aria-selected={view === 'song'}
-        className={tab(view === 'song')}
-        onClick={() => set({ view: 'song' })}
-        title="Line up your sections into a full song (key 4)"
-      >
-        🎼 Song arrangement
-        <span className="text-xs font-bold text-cream-500">· {p.song.length} block{p.song.length === 1 ? '' : 's'}</span>
-      </button>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 shrink-0">
+      <div role="tablist" aria-label="View" className="flex rounded-xl bg-ink-800/80 border border-ink-600/60 p-1 shrink-0">
+        <button role="tab" aria-selected={view === 'editor'} className={tab(view === 'editor')} onClick={() => showView('editor')} title="Edit a section's beat, chords and melody">
+          🎛 Edit
+        </button>
+        <button
+          role="tab"
+          aria-selected={view === 'song'}
+          className={tab(view === 'song')}
+          onClick={() => showView('song')}
+          title="Line up your sections into a full song (key 4)"
+        >
+          🎼 Song
+          <span className="ml-1.5 text-xs font-bold text-cream-500">{blocks}</span>
+        </button>
+      </div>
+      {view === 'editor' && <SectionChips />}
     </div>
   );
 }
@@ -201,9 +201,10 @@ export default function App() {
         e.preventDefault();
         togglePlay();
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && TRACK_KEYS[e.key]) {
-        ui.set({ view: 'editor', track: TRACK_KEYS[e.key] });
+        showView('editor');
+        ui.set({ track: TRACK_KEYS[e.key] });
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '4') {
-        ui.set({ view: 'song' });
+        showView('song');
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         e.shiftKey ? useProject.getState().redo() : useProject.getState().undo();
@@ -235,14 +236,13 @@ export default function App() {
 
       <div className="flex-1 min-h-0 grid gap-2">
         <main className="flex flex-col gap-2 min-h-0 min-w-0 lg:overflow-y-auto">
-          <ViewTabs />
+          <Toolbar />
           {view === 'song' ? (
             <ErrorBoundary name="song arrangement">
               <SongEditor />
             </ErrorBoundary>
           ) : (
             <>
-              <SectionPicker />
               <ErrorBoundary name="section overview">
                 <Overview />
               </ErrorBoundary>

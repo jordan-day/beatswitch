@@ -42,12 +42,12 @@ export function MiniKeyboard(props: {
               aria-label={name}
             >
               {active ? (
-                <span className="text-[10px] font-extrabold text-ink-950 leading-none">
+                <span className="text-xs font-extrabold text-ink-950 leading-none">
                   {on.get(m)}
                   {m % 12 === rootChroma && <span className="block text-[8px]">root</span>}
                 </span>
               ) : (
-                m % 12 === 0 && <span className="text-[9px] text-ink-600 font-bold">{name}</span>
+                m % 12 === 0 && <span className="text-xs text-ink-600 font-bold">{name}</span>
               )}
             </button>
           );
@@ -73,7 +73,7 @@ export function MiniKeyboard(props: {
               aria-pressed={active}
               aria-label={name}
             >
-              {active && <span className="text-[9px] font-extrabold text-ink-950 leading-none">{on.get(m)}</span>}
+              {active && <span className="text-xs font-extrabold text-ink-950 leading-none">{on.get(m)}</span>}
             </button>
           );
         })}

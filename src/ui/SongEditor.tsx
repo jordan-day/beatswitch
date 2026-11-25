@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { showView } from '../audio/engine';
 import { stepSeconds } from '../audio/graph';
 import { useProject, useUi, withUndo } from '../state/project';
 import {
@@ -34,35 +35,38 @@ export function SongEditor() {
   const seconds = songSteps(p) * stepSeconds(p.bpm);
 
   return (
-    <section className="card p-4 flex flex-col gap-5 shrink-0" aria-label="Song arrangement">
-      {/* ---- sections: click one to edit it ---- */}
-      <div className="flex flex-col gap-2">
-        <span className="label shrink-0" title="Click a section to edit it. Drag one into the arrangement to add it.">
-          Sections
-        </span>
+    <div className="flex flex-col gap-3 shrink-0">
+      {/* ---- sections ---- */}
+      <section className="card p-4 flex flex-col gap-3" aria-label="Sections">
+        <div>
+          <h2 className="text-base font-extrabold">Sections</h2>
+          <p className="text-xs text-cream-500">
+            Each section is a loop you build in the Edit tab. Click one to select it, double-click to edit it, or drag it into the song below.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2 min-w-0">
           {p.sections.map((s) => (
             <SectionCard key={s.id} id={s.id} />
           ))}
           <button
-            className="rounded-xl border-2 border-dashed border-ink-600 px-4 py-2 text-sm font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500"
+            className="rounded-xl border-2 border-dashed border-ink-600 px-4 py-2 text-sm font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500 transition"
             onClick={() => withUndo('New section added (a copy of the one you were on)', addSection)}
             title="Add a section: it starts as a copy of the section you're editing"
           >
             ＋ New section
           </button>
         </div>
-      </div>
+      </section>
 
       {/* ---- arrangement ---- */}
-      <div>
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="label" title="Plays left to right. Drag blocks to reorder, or Copy one to repeat it.">
-            Arrangement · plays left to right, drag to reorder
-          </span>
-          <span className="text-xs text-cream-500" title="Total length of the arrangement">
-            <b className="text-cream-100">{formatTime(seconds)}</b> · {songBars(p)} bars
-          </span>
+      <section className="card p-4 flex flex-col gap-3" aria-label="Song arrangement">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="mr-auto">
+            <h2 className="text-base font-extrabold">
+              Song <span className="ml-1 text-sm font-bold text-cream-500" title="Total length of the song">{formatTime(seconds)} · {songBars(p)} bars</span>
+            </h2>
+            <p className="text-xs text-cream-500">Plays left to right. Press ▶ at the top to hear it all. Drag blocks to reorder.</p>
+          </div>
           <Toggle on={p.fadeIn} onClick={() => setFade('fadeIn', !p.fadeIn)} title="Fade in over the first 2 bars">
             Fade in
           </Toggle>
@@ -71,18 +75,22 @@ export function SongEditor() {
           </Toggle>
         </div>
         <Arrangement />
-      </div>
-    </section>
+        <p className="text-xs text-cream-500">
+          Under each block, tap 🥁 drums · 🎸 bass · 🎹 chords · 🎵 melody to switch a part off there (nice for intros and breakdowns).{' '}
+          <b className="text-cream-300">Fill</b> adds a drum fill leading into the next block. ⧉ copies a block, ✕ removes it.
+        </p>
+      </section>
+    </div>
   );
 }
 
-/** The editor view's slim section picker: click a section to edit it. */
-export function SectionPicker() {
+/** Pick which section to edit (the editor view's toolbar). */
+export function SectionChips() {
   const p = useProject((s) => s.project);
   const { switchSection, addSection } = useProject();
   const set = useUi((s) => s.set);
   return (
-    <section className="card p-2 sm:p-2.5 shrink-0 flex items-center gap-2" aria-label="Sections">
+    <div className="flex items-center gap-2 min-w-0" role="group" aria-label="Section to edit">
       <span className="label shrink-0">Section</span>
       <div className="flex flex-wrap gap-1.5 min-w-0">
         {p.sections.map((s) => {
@@ -90,7 +98,10 @@ export function SectionPicker() {
           return (
             <button
               key={s.id}
-              className={'rounded-lg border-2 pl-3 pr-2.5 py-1 text-sm font-extrabold ' + (on ? 'border-cream-100 bg-ink-700' : 'border-ink-600 bg-ink-900/60 hover:bg-ink-700')}
+              className={
+                'rounded-lg border pl-3.5 pr-3 py-1 text-sm font-extrabold transition ' +
+                (on ? 'border-cream-100 bg-ink-600 text-cream-100' : 'border-ink-600 bg-ink-800/60 text-cream-300 hover:bg-ink-700 hover:text-cream-100')
+              }
               style={{ boxShadow: `inset 4px 0 0 ${sectionColor(p, s.id)}` }}
               aria-pressed={on}
               onClick={() => {
@@ -104,14 +115,14 @@ export function SectionPicker() {
           );
         })}
         <button
-          className="rounded-lg border-2 border-dashed border-ink-600 px-3 py-1 text-xs font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500"
+          className="rounded-lg border border-dashed border-ink-600 px-3 py-1 text-sm font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500 transition"
           onClick={() => withUndo('New section added (a copy of the one you were on)', addSection)}
           title="Add a section: it starts as a copy of the section you're editing"
         >
-          ＋ New section
+          ＋ New
         </button>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -149,6 +160,12 @@ function SectionCard({ id }: { id: string }) {
         switchSection(id);
         set({ viewBar: 0 });
       }}
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest('input,button')) return;
+        switchSection(id);
+        set({ viewBar: 0 });
+        showView('editor');
+      }}
       onPointerDown={(e) => (fromInput.current = (e.target as HTMLElement).tagName === 'INPUT')}
       onDragStart={(e) => {
         if (fromInput.current) return e.preventDefault();
@@ -158,7 +175,7 @@ function SectionCard({ id }: { id: string }) {
       }}
       onDragEnd={() => (dragged = null)}
       aria-current={editing}
-      title="Click to edit this section. Drag into the arrangement to add it to the song"
+      title="Click to select, double-click to edit. Drag into the song to add it"
     >
       <input
         className="bg-transparent font-extrabold text-base w-28 min-w-0 rounded px-1 -mx-1 hover:bg-ink-700 focus:bg-ink-700"
@@ -167,10 +184,10 @@ function SectionCard({ id }: { id: string }) {
         aria-label="Section name"
         title="Click to rename"
       />
-      <span className="text-[10px] text-cream-500 shrink-0" title={`${sectionBars(p, id)}-bar loop, used ${uses}× in the song`}>
+      <span className="text-xs text-cream-500 shrink-0" title={`${sectionBars(p, id)}-bar loop, used ${uses}× in the song`}>
         {sectionBars(p, id)} bar{sectionBars(p, id) > 1 ? 's' : ''} · {uses}×
       </span>
-      {editing && <span className="text-[9px] font-bold text-ink-950 bg-cream-100 rounded px-1">EDITING</span>}
+      {editing && <span className="text-xs font-bold text-ink-950 bg-cream-100 rounded px-1">SELECTED</span>}
       {confirm ? (
         <div className="flex items-center gap-1" role="alertdialog" aria-label={`Delete ${s.name}?`}>
           <span className="text-xs">Delete{uses ? ` + ${uses} block${uses > 1 ? 's' : ''}` : ''}?</span>
@@ -300,7 +317,7 @@ function Arrangement() {
                 (live ? 'border-cream-100' : 'border-ink-600') +
                 (dragFrom === seg.index ? ' opacity-40' : '')
               }
-              style={{ width: Math.max(190, Math.min(300, seg.steps * 2)) }}
+              style={{ width: Math.max(210, Math.min(300, seg.steps * 2)) }}
               aria-label={`Block ${i + 1}: ${section.name} ×${b.repeats}`}
               title="Drag to move this block"
             >
@@ -309,7 +326,7 @@ function Arrangement() {
               </div>
               <div className="flex items-center gap-1">
                 <span className="font-extrabold text-sm truncate flex-1">{section.name}</span>
-                <span className="text-[10px] text-cream-500">{(seg.steps / 16) | 0} bars</span>
+                <span className="text-xs text-cream-500">{(seg.steps / 16) | 0} bars</span>
                 <button
                   className="btn px-1.5 py-0 text-xs"
                   onClick={() => duplicateBlock(i)}
@@ -336,7 +353,7 @@ function Arrangement() {
                     <button
                       key={part}
                       className={
-                        'flex-1 rounded-md text-sm py-1 border ' +
+                        'flex-1 rounded-md text-base py-1.5 border ' +
                         (off ? 'border-ink-600 opacity-35 line-through' : 'border-transparent bg-ink-700 hover:bg-ink-600')
                       }
                       onClick={() => toggleBlockMute(i, part)}
@@ -349,7 +366,7 @@ function Arrangement() {
                   );
                 })}
                 <button
-                  className={'rounded-md text-[10px] font-bold px-1.5 border ' + (b.fill ? 'bg-cream-100 text-ink-950 border-cream-100' : 'border-ink-600 text-cream-500 hover:text-cream-100')}
+                  className={'rounded-md text-xs font-bold px-2 border ' + (b.fill ? 'bg-cream-100 text-ink-950 border-cream-100' : 'border-ink-600 text-cream-500 hover:text-cream-100')}
                   onClick={() => toggleFill(i)}
                   aria-pressed={b.fill}
                   title="Drum fill on the last beat, leading into the next block"

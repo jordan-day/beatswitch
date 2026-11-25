@@ -106,7 +106,7 @@ export function ProjectMenu() {
         aria-haspopup="menu"
         title="Start a new beat, or open one"
       >
-        📂 Beats <span className="text-[10px] opacity-70">▾</span>
+        📂 Beats <span className="text-xs opacity-70">▾</span>
       </button>
       <button className="btn" onClick={onSave} title="Keep a copy in your beats list (in this browser)" aria-label="Save">
         💾<span className="hidden xl:inline"> Save</span>
@@ -157,7 +157,7 @@ function AutosaveStatus() {
     return () => clearTimeout(t);
   }, [project]);
   return (
-    <span className="text-[10px] text-cream-500 h-3 leading-3" title="Your current beat is kept in this browser automatically" aria-live="polite">
+    <span className="text-xs text-cream-500 h-3 leading-3" title="Your current beat is kept in this browser automatically" aria-live="polite">
       {state === 'saving' ? 'Saving…' : state === 'saved' ? '✓ Autosaved' : 'Autosaves as you go'}
     </span>
   );

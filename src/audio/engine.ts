@@ -158,6 +158,13 @@ export async function setPlayMode(mode: 'section' | 'song') {
   if (wasPlaying) await play();
 }
 
+/** Switch view. The play button follows it: loop the section in the editor, play the whole song in the song view. */
+export function showView(view: 'editor' | 'song') {
+  if (useUi.getState().view === view) return;
+  useUi.getState().set({ view });
+  void setPlayMode(view === 'song' ? 'song' : 'section');
+}
+
 export async function togglePlay() {
   if (useUi.getState().playing) stop();
   else await play();

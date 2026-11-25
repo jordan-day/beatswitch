@@ -119,7 +119,7 @@ export function MelodyRoll() {
               {chordLabels.map((c) => (
                 <div
                   key={c.col}
-                  className="text-[11px] font-extrabold text-chord truncate border-l-2 border-chord/50 pl-1"
+                  className="text-xs font-extrabold text-chord truncate border-l-2 border-chord/50 pl-1"
                   style={{ gridColumn: `${c.col + 1} / span ${c.span}` }}
                 >
                   {c.name}
@@ -132,7 +132,7 @@ export function MelodyRoll() {
                   aria-hidden="true"
                   className={
                     'row-start-2 text-center leading-none ' +
-                    (i % 4 === 0 ? 'text-[11px] font-extrabold ' : 'text-[9px] ') +
+                    (i % 4 === 0 ? 'text-xs font-extrabold ' : 'text-xs ') +
                     (playStep >= offset && Math.floor((playStep - offset) / 4) === Math.floor(i / 4) ? 'text-cream-100' : 'text-cream-500')
                   }
                   style={{ gridColumn: i + 1 }}
@@ -152,7 +152,7 @@ export function MelodyRoll() {
                   <button
                     key={d}
                     className={
-                      'text-[11px] font-bold rounded px-1 text-right leading-none hover:bg-ink-600 ' +
+                      'text-xs font-bold rounded px-1 text-right leading-none hover:bg-ink-600 ' +
                       (d % 7 === 0 ? 'text-cream-100 bg-ink-700' : 'text-cream-500')
                     }
                     onClick={() => previewNote(name, 'melody', id)}
@@ -233,7 +233,7 @@ export function MelodyRoll() {
                   }}
                   title={`${noteName(n.d)}: click to delete, drag the right edge to make longer/shorter`}
                 >
-                  <span className="text-[10px] font-extrabold text-ink-950 pl-1 truncate pointer-events-none">
+                  <span className="text-xs font-extrabold text-ink-950 pl-1 truncate pointer-events-none">
                     {n.s >= offset ? Note.pitchClass(noteName(n.d)) : ''}
                   </span>
                   {n.s + n.l <= offset + STEPS_PER_BAR && (

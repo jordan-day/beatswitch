@@ -106,7 +106,7 @@ export function ChordSoundControls() {
           ))}
         </select>
       </Field>
-      <Slider className="w-24" label="Volume" value={p.chords.volume} color="#8fb3e5" onChange={(v) => update((d) => void (d.chords.volume = v), 'vol:chords')} />
+      <Slider inline className="w-36" label="Volume" value={p.chords.volume} color="#8fb3e5" onChange={(v) => update((d) => void (d.chords.volume = v), 'vol:chords')} />
     </>
   );
 }
@@ -146,7 +146,8 @@ export function MelodySoundControls() {
         </button>
       </div>
       <Slider
-        className="w-24"
+        inline
+        className="w-36"
         label="Volume"
         value={mel.volume}
         color={melodyColor(p, melodyId)}

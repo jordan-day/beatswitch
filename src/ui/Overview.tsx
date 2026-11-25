@@ -62,7 +62,7 @@ export function Overview() {
                 onClick={() => set({ viewBar: b })}
                 aria-pressed={b === bar}
                 className={
-                  'text-[11px] font-bold text-left pl-1.5 border-l-2 rounded-sm transition ' +
+                  'text-xs font-bold text-left pl-1.5 border-l-2 rounded-sm transition ' +
                   (b === bar ? 'border-cream-100 text-cream-100 bg-ink-600/60' : 'border-ink-600 text-cream-500 hover:text-cream-100')
                 }
                 title={`Edit bar ${b + 1}`}
@@ -140,7 +140,7 @@ export function Overview() {
           <Lane active={track === 'melody'} dim={allMelodies(p).every((m) => m.track.mute)}>
             <div className="relative h-full">
               {allMelodies(p).every((m) => m.track.notes.length === 0) && (
-                <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-cream-500">No melody yet</span>
+                <span className="absolute inset-0 flex items-center pl-2 text-xs text-cream-500">No melody yet</span>
               )}
               {allMelodies(p).flatMap(({ id, track: m }) =>
                 m.notes
@@ -190,7 +190,7 @@ function SectionSwitcher() {
     <div className="h-5 flex items-center gap-1" title={playingOther ? 'The song is playing another section right now' : 'Section you are editing'}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: sectionColor(p, p.activeSection) }} />
       <select
-        className="bg-transparent text-[11px] font-extrabold uppercase tracking-wide text-cream-100 min-w-0 w-full cursor-pointer rounded"
+        className="bg-transparent text-xs font-extrabold uppercase tracking-wide text-cream-100 min-w-0 w-full cursor-pointer rounded"
         value={p.activeSection}
         onChange={(e) => switchSection(e.target.value)}
         aria-label="Section you are editing"

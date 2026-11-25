@@ -67,7 +67,7 @@ export function ChordPanel() {
                 <div key={b} className={'flex-1 min-w-0 flex flex-col gap-1 ' + (b > 0 ? 'border-l-2 border-ink-600 pl-2 ml-2' : '')}>
                   <div
                     className={
-                      'text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 ' +
+                      'text-xs font-bold uppercase tracking-wider flex items-center gap-1 ' +
                       (b === viewBar ? 'text-cream-100' : 'text-cream-500')
                     }
                   >
@@ -95,7 +95,7 @@ export function ChordPanel() {
                         >
                           <span className="font-extrabold truncate text-base shrink-0">{c ? c.symbol : '–'}</span>
                           {perBar === 1 && (
-                            <span className="text-[11px] text-cream-500 truncate">
+                            <span className="text-xs text-cream-500 truncate">
                               {c ? (c.notes ? '✏️ custom' : chordFeel(c.symbol, p.tonic, p.mood)) : 'silent'}
                             </span>
                           )}
@@ -192,9 +192,9 @@ function ChordHitsCaption() {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2 -mt-1 mb-2">
       <span className="label">↑ Chord hits</span>
-      <span className="text-[11px] text-cream-500">Click squares to choose when the chords play. Each hit rings until the next one.</span>
+      <span className="text-xs text-cream-500">Click squares to choose when the chords play. Each hit rings until the next one.</span>
       <button
-        className="text-[11px] text-cream-500 hover:text-cream-100 ml-auto rounded"
+        className="text-xs text-cream-500 hover:text-cream-100 ml-auto rounded"
         onClick={() => withUndo('Chord hits cleared', () => clearRow('chords'))}
       >
         ✕ Clear hits
@@ -263,7 +263,7 @@ function ProgressionPicker() {
               </div>
             );
           })}
-          <p className="text-[11px] text-cream-500 px-2 pt-1">Change the mood in the settings on the right for different progressions.</p>
+          <p className="text-xs text-cream-500 px-2 pt-1">Change the mood in the settings on the right for different progressions.</p>
         </div>
       )}
     </div>
@@ -345,7 +345,7 @@ function ChordEditor({ index }: { index: number }) {
             <div>
               <div className="flex flex-wrap items-baseline gap-2 mb-1">
                 <span className="label">Notes in this chord</span>
-                <span className="text-[11px] text-cream-500">click keys to add or remove notes</span>
+                <span className="text-xs text-cream-500">click keys to add or remove notes</span>
               </div>
               <MiniKeyboard
                 notes={notes}
@@ -357,7 +357,7 @@ function ChordEditor({ index }: { index: number }) {
               />
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {roles.map((r) => (
-                  <span key={r.note} className="rounded-md bg-chord/15 border border-chord/40 px-1.5 py-0.5 text-[11px]">
+                  <span key={r.note} className="rounded-md bg-chord/15 border border-chord/40 px-1.5 py-0.5 text-xs">
                     <b>{Note.pitchClass(r.note)}</b>
                     {r.role && <span className="text-cream-500"> · {r.role}</span>}
                   </span>

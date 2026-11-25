@@ -43,7 +43,7 @@ export function LofiPanel() {
         aria-label="Lo-fi-ness"
         title="One knob to make everything sound older and warmer"
       />
-      <div className="flex justify-between text-[11px] text-cream-500 -mt-1">
+      <div className="flex justify-between text-xs text-cream-500 -mt-1">
         <span>Clean</span>
         <span>Dusty</span>
       </div>
@@ -63,7 +63,7 @@ export function LofiPanel() {
               onChange={(v) => setFx(f.key, v)}
             />
           ))}
-          <p className="text-[11px] text-cream-500">Moving the big knob again resets these.</p>
+          <p className="text-xs text-cream-500">Moving the big knob again resets these.</p>
         </div>
       )}
     </div>

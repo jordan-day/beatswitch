@@ -30,7 +30,7 @@ export function EditorHeader(props: { children?: React.ReactNode }) {
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 ml-auto">{props.children}</div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 ml-auto">{props.children}</div>
     </div>
   );
 }

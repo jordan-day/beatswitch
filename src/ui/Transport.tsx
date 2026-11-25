@@ -1,38 +1,7 @@
-import { setPlayMode, togglePlay } from '../audio/engine';
+import { togglePlay } from '../audio/engine';
 import { useProject, useUi } from '../state/project';
 import { BPM_MAX, BPM_MIN } from '../state/types';
 import { Slider } from './common';
-
-/**
- * What the Play button plays: the section you're editing, looping, or the whole song once.
- * Worded "Loop / Whole song".
- */
-function PlayMode() {
-  const mode = useUi((s) => s.playMode);
-  const opts = [
-    { id: 'section' as const, label: '🔁 Loop', hint: 'Play button loops the section you are editing' },
-    { id: 'song' as const, label: '🎼 Whole song', hint: 'Play button plays the whole song once, start to finish' },
-  ];
-  return (
-    <div className="flex flex-col gap-0.5 -ml-2" role="radiogroup" aria-label="Play button plays">
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          role="radio"
-          aria-checked={mode === o.id}
-          title={o.hint}
-          onClick={() => setPlayMode(o.id)}
-          className={
-            'text-[11px] font-bold rounded-md px-2 py-0.5 text-left transition ' +
-            (mode === o.id ? 'bg-cream-100 text-ink-950' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-700')
-          }
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Loop the whole section, or just the bar you're looking at (to practise or polish one bar).
@@ -86,12 +55,11 @@ export function Transport() {
           'w-12 h-12 shrink-0 rounded-full text-xl font-black grid place-items-center transition active:scale-95 shadow-lg ' +
           (playing ? 'bg-cream-100 text-ink-950' : 'bg-kick text-ink-950 hover:brightness-110')
         }
-        title={`${playing ? 'Stop' : wholeSong ? 'Play the whole song' : 'Play the loop'} (Space)`}
+        title={`${playing ? 'Stop' : wholeSong ? 'Play the whole song' : 'Loop this section'} (Space)`}
         aria-label={playing ? 'Stop' : 'Play'}
       >
         {playing ? '■' : '▶'}
       </button>
-      <PlayMode />
 
       <Slider
         className="w-[88px]"
