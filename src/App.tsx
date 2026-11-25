@@ -82,7 +82,8 @@ function HelpOverlay() {
   );
 }
 
-function Toast() {
+/** The message pop-up (with Undo after a big change). `bottom` lifts it, e.g. above a bottom tab bar. */
+export function Toast({ bottom }: { bottom?: string } = {}) {
   const toast = useUi((s) => s.toast);
   const set = useUi((s) => s.set);
   useEffect(() => {
@@ -96,6 +97,7 @@ function Toast() {
     <div
       key={toast.id}
       role="status"
+      style={bottom ? { bottom } : undefined}
       className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-cream-100 text-ink-950 font-bold pl-4 pr-2 py-2 shadow-2xl text-sm flex items-center gap-3 min-h-[44px]"
     >
       <span className="flex-1">{toast.text}</span>

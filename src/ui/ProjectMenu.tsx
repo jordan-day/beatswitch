@@ -35,7 +35,7 @@ export function BeatName() {
  * The ☰ menu: new song, open song (starter beats, your saved songs, a file), save, export, share
  * and help. "Open song…" swaps the menu for the list of songs, with a way back.
  */
-export function ProjectMenu() {
+export function ProjectMenu({ onNew }: { onNew?: () => void } = {}) {
   const project = useProject((s) => s.project);
   const notify = useUi((s) => s.notify);
   const [menu, setMenu] = useState<'main' | 'open' | null>(null);
@@ -120,7 +120,8 @@ export function ProjectMenu() {
           busy={exporting}
           onNew={() => {
             setMenu(null);
-            setNewOpen(true);
+            if (onNew) onNew(); // the mobile version starts its own guided setup
+            else setNewOpen(true);
           }}
           onOpen={() => setMenu('open')}
           onSave={() => {

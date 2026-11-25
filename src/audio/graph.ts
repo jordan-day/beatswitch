@@ -357,7 +357,53 @@ export class Graph {
     this.playSample(p.sample.start, p.sample.length / sampleRate(p.sample.pitch), Tone.now() + 0.02);
   }
 
-  /** Play a chord right now (chord picker previews). */
+  /**
+   * Previews (hearing a key, a kit, a progression…) play several notes in a row. Their later notes
+   * wait on timers rather than being fixed on the audio clock, so a new preview (or tapping again)
+   * can cancel them: previews never pile up on top of each other.
+   */
+  private previewTimers: number[] = [];
+
+  /** Stop the preview that's playing: its notes still to come, and what's still ringing (unless the song is playing). */
+  cutPreviews() {
+    this.previewTimers.forEach((t) => clearTimeout(t));
+    this.previewTimers = [];
+    if (Tone.getTransport().state !== 'started') this.silence();
+  }
+
+  /** Run `fn` with an audio time `offset` seconds from now, as part of the current preview. */
+  private later(offset: number, fn: (time: number) => void) {
+    if (offset <= 0.01) return fn(Tone.now() + 0.03);
+    this.previewTimers.push(window.setTimeout(() => fn(Tone.now() + 0.01), offset * 1000));
+  }
+
+  /** Hear chords one after another, `gap` seconds apart (a progression, or the key). Replaces any preview playing. */
+  previewChords(chords: (ChordSlot | string)[], gap: number, dur: number) {
+    this.cutPreviews();
+    chords.forEach((c, i) => this.later(i * gap, (t) => this.preview(c, t, dur)));
+  }
+
+  /** Hear one chord, replacing any preview playing. */
+  previewChord(chord: ChordSlot | string) {
+    this.cutPreviews();
+    this.preview(chord, Tone.now() + 0.02);
+  }
+
+  /** Hear the first bar of a melody at the song's tempo (after making a new one, say). */
+  previewMelodyBar(p: Project, melodyId: string) {
+    const track = allMelodies(p).find((m) => m.id === melodyId)?.track;
+    const voice = this.melodies.get(melodyId)?.voice;
+    if (!track || !voice) return;
+    this.cutPreviews();
+    const sd = stepSeconds(p.bpm);
+    for (const n of track.notes) {
+      if (n.s >= STEPS_PER_BAR || n.d >= MELODY_ROWS) continue;
+      const note = melodyPitch(p.tonic, p.mood, track.octave, n.d, n.x ?? 0);
+      this.later(n.s * sd, (t) => voice.play([note], Math.min(n.l, STEPS_PER_BAR - n.s) * sd * 0.92, t, 0.75));
+    }
+  }
+
+  /** Play a chord at `time` (the building block of the previews above; doesn't stop anything). */
   preview(chord: ChordSlot | string, time = Tone.now(), dur = 1.2) {
     const slot = typeof chord === 'string' ? { symbol: chord } : chord;
     slotNotes(slot).forEach((n, i) => this.keys?.voice.play([n], dur, time + i * 0.015, 0.7));
@@ -373,41 +419,48 @@ export class Graph {
 
   /** A two-bar taste of a beat (chords + a simple groove) at its tempo and swing, for the new-beat wizard. */
   previewDemo(p: Project) {
+    this.cutPreviews();
     const sd = stepSeconds(p.bpm);
-    const t0 = Tone.now() + 0.05;
     const late = (i: number) => (i % 2 === 1 ? sd * (p.swing / 100) * 0.5 : 0); // rough swing on the off-16ths
     const chords = p.chords.slots.filter((c): c is NonNullable<typeof c> => !!c);
-    for (let b = 0; b < 2; b++) {
-      const chord = chords[b % Math.max(1, chords.length)];
-      if (chord) this.preview(chord, t0 + b * 16 * sd, 16 * sd * 0.95);
-    }
-    for (let i = 0; i < 32; i++) {
-      const s = i % 16;
-      const t = t0 + i * sd + late(i);
-      if (s === 0 || s === 10) this.drums.kick?.voice.trigger(t, s === 0 ? 0.95 : 0.7);
-      if (s === 4 || s === 12) this.drums.snare?.voice.trigger(t, 0.85);
-      if (s % 2 === 0) this.drums.hat?.voice.trigger(t, s % 4 === 0 ? 0.8 : 0.55);
+    // one timer per beat (so it can be cancelled), with that beat's hits placed exactly on the audio clock
+    for (let beat = 0; beat < 8; beat++) {
+      this.later(beat * 4 * sd, (t0) => {
+        const b = Math.floor(beat / 4);
+        const chord = chords[b % Math.max(1, chords.length)];
+        if (beat % 4 === 0 && chord) this.preview(chord, t0, 16 * sd * 0.95);
+        for (let k = 0; k < 4; k++) {
+          const i = beat * 4 + k;
+          const s = i % 16;
+          const t = t0 + k * sd + late(i);
+          if (s === 0 || s === 10) this.drums.kick?.voice.trigger(t, s === 0 ? 0.95 : 0.7);
+          if (s === 4 || s === 12) this.drums.snare?.voice.trigger(t, 0.85);
+          if (s % 2 === 0) this.drums.hat?.voice.trigger(t, s % 4 === 0 ? 0.8 : 0.55);
+        }
+      });
     }
   }
 
   /** Hear the drum kit: kick, snare, then a couple of hats. */
   previewKit() {
-    const t = Tone.now() + 0.03;
-    this.drums.kick?.voice.trigger(t, 0.9);
-    this.drums.snare?.voice.trigger(t + 0.3, 0.8);
-    this.drums.hat?.voice.trigger(t + 0.6, 0.7);
-    this.drums.hat?.voice.trigger(t + 0.75, 0.55);
+    this.cutPreviews();
+    this.later(0, (t) => this.drums.kick?.voice.trigger(t, 0.9));
+    this.later(0.3, (t) => this.drums.snare?.voice.trigger(t, 0.8));
+    this.later(0.6, (t) => {
+      this.drums.hat?.voice.trigger(t, 0.7);
+      this.drums.hat?.voice.trigger(t + 0.15, 0.55);
+    });
   }
 
   /** Hear the bass sound: the first chord's root, then its fifth. */
   previewBass(p: Project) {
     const chord = p.chords.slots.find((s) => s);
     if (!chord) return;
-    const t = Tone.now() + 0.03;
+    this.cutPreviews();
     const root = bassNote(chord, 1);
     const fifth = bassNote(chord, 2);
-    if (root) this.bass?.triggerAttackRelease(root, 0.4, t, 0.8);
-    if (fifth) this.bass?.triggerAttackRelease(fifth, 0.4, t + 0.45, 0.8);
+    if (root) this.later(0, (t) => this.bass?.triggerAttackRelease(root, 0.4, t, 0.8));
+    if (fifth) this.later(0.45, (t) => this.bass?.triggerAttackRelease(fifth, 0.4, t, 0.8));
   }
 
   /** Hear a melody's instrument: three notes up its scale. */
@@ -415,8 +468,8 @@ export class Graph {
     const track = allMelodies(p).find((m) => m.id === melodyId)?.track;
     const voice = this.melodies.get(melodyId)?.voice;
     if (!track || !voice) return;
-    const t = Tone.now() + 0.03;
-    [0, 2, 4].forEach((d, i) => voice.play([degreeNote(p.tonic, p.mood, track.octave, d)], 0.5, t + i * 0.22, 0.75));
+    this.cutPreviews();
+    [0, 2, 4].forEach((d, i) => this.later(i * 0.22, (t) => voice.play([degreeNote(p.tonic, p.mood, track.octave, d)], 0.5, t, 0.75)));
   }
 
   /**

@@ -114,6 +114,7 @@ export function ensureAudio(): Promise<Graph> {
  */
 export async function play() {
   const g = await ensureAudio();
+  g.cutPreviews(); // a preview still going would play over the start of the song
   const t = Tone.getTransport();
   if (t.state === 'started') return;
   const songMode = useUi.getState().playMode === 'song';
@@ -244,15 +245,23 @@ export async function togglePlay() {
   else await play();
 }
 
-export async function previewChord(chord: ChordSlot | string) {
-  const g = await ensureAudio();
-  g.preview(chord);
+/** Stop any preview that's playing (moving to another screen, say). */
+export function cutPreviews() {
+  graph?.cutPreviews();
 }
 
+/** Hear a chord (replaces any preview playing). While the song plays you hear it there, so nothing extra plays. */
+export async function previewChord(chord: ChordSlot | string) {
+  const g = await ensureAudio();
+  if (useUi.getState().playing) return;
+  g.previewChord(chord);
+}
+
+/** Hear a progression (a "▶ listen" button): stops the song first, and replaces any preview playing. */
 export async function previewProgression(chords: (ChordSlot | string | null)[]) {
   const g = await ensureAudio();
-  const now = Tone.now() + 0.05;
-  chords.forEach((c, i) => c && g.preview(c, now + i * 0.75, 0.7));
+  if (useUi.getState().playing) stop();
+  g.previewChords(chords.filter((c): c is ChordSlot | string => !!c), 0.75, 0.7);
 }
 
 /**
@@ -261,27 +270,26 @@ export async function previewProgression(chords: (ChordSlot | string | null)[]) 
  */
 async function previewSoon(play: (g: Graph, p: Project) => void) {
   const g = await ensureAudio();
+  // while the song plays, the change is heard in it: a preview on top would just clash
+  if (useUi.getState().playing) return;
   await new Promise((r) => setTimeout(r, 140));
+  if (useUi.getState().playing) return;
   play(g, useProject.getState().project);
 }
 
 export const previewKit = () => previewSoon((g) => g.previewKit());
 export const previewBass = () => previewSoon((g, p) => g.previewBass(p));
 export const previewMelody = (melodyId: string) => previewSoon((g, p) => g.previewMelody(p, melodyId));
+/** Hear the first bar of a melody (after 🎲 makes a new one). */
+export const previewMelodyBar = (melodyId: string) => previewSoon((g, p) => g.previewMelodyBar(p, melodyId));
 /** Hear the key: the first few chords of the progression. */
 export const previewKey = () =>
-  previewSoon((g, p) => {
-    const now = Tone.now() + 0.03;
-    p.chords.slots
-      .filter((c): c is ChordSlot => !!c)
-      .slice(0, 4)
-      .forEach((c, i) => g.preview(c, now + i * 0.55, 0.6));
-  });
+  previewSoon((g, p) => g.previewChords(p.chords.slots.filter((c): c is ChordSlot => !!c).slice(0, 4), 0.55, 0.6));
 /** Hear the chord instrument: the first chord. */
 export const previewChordSound = () =>
   previewSoon((g, p) => {
     const c = p.chords.slots.find((s) => s);
-    if (c) g.preview(c);
+    if (c) g.previewChord(c);
   });
 
 /**
@@ -298,10 +306,7 @@ async function withDraft(draft: Project, play: (g: Graph) => void) {
   play(g);
 }
 export const previewDraftChords = (draft: Project) =>
-  withDraft(draft, (g) => {
-    const now = Tone.now() + 0.03;
-    draft.chords.slots.filter((c): c is ChordSlot => !!c).slice(0, 4).forEach((c, i) => g.preview(c, now + i * 0.55, 0.6));
-  });
+  withDraft(draft, (g) => g.previewChords(draft.chords.slots.filter((c): c is ChordSlot => !!c).slice(0, 4), 0.55, 0.6));
 export const previewDraftKit = (draft: Project) => withDraft(draft, (g) => g.previewKit());
 export const previewDraftDemo = (draft: Project) => withDraft(draft, (g) => g.previewDemo(draft));
 export function restoreAudio() {
