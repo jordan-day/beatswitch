@@ -14,7 +14,7 @@ const ROWS_TEMPLATE = `repeat(${MELODY_ROWS}, minmax(14px, 30px))`;
 
 export function MelodyRoll() {
   const p = useProject((s) => s.project);
-  const { addNote, resizeNote, removeNote, clearMelody } = useProject();
+  const { addNote, resizeNote, removeNote, clearMelody, randomizeMelody } = useProject();
   const { viewBar, step: playStep } = useUi();
   const bar = Math.min(viewBar, p.bars - 1);
   const offset = bar * STEPS_PER_BAR;
@@ -99,6 +99,14 @@ export function MelodyRoll() {
       <EditorHeader>
         <MelodySoundControls />
         {m.mute && <span className="text-xs font-bold text-kick">🔇 {name} is muted</span>}
+        <button
+          className="btn text-base px-2.5 py-1"
+          onClick={() => withUndo(`New ${name.toLowerCase()} 🎲`, () => randomizeMelody(id))}
+          title={`Surprise me: make a random, gentle ${name.toLowerCase()}`}
+          aria-label="Random melody"
+        >
+          🎲
+        </button>
         <button
           className="btn text-xs"
           onClick={() => withUndo(`${name} cleared`, () => clearMelody(id))}

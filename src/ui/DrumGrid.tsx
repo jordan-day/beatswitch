@@ -84,11 +84,12 @@ export function DrumGrid() {
           </button>
         )}
         <button
-          className="btn text-xs"
+          className="btn text-base px-2.5 py-1"
           onClick={() => withUndo('New drum pattern 🎲', randomize)}
-          title="Make a random (but musical) drum pattern"
+          title="Surprise me: make a random (but musical) drum pattern"
+          aria-label="Random drum pattern"
         >
-          🎲 Surprise me
+          🎲
         </button>
       </EditorHeader>
 

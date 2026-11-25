@@ -1,3 +1,4 @@
+import { previewBass, previewChordSound, previewKit, previewMelody } from '../audio/engine';
 import { useProject, useUi } from '../state/project';
 import { MAIN_MELODY, melodyColor, melodyName, melodyTrack } from '../state/tracks';
 import {
@@ -34,7 +35,7 @@ export const MELODY_LABEL: Record<MelodySound, string> = {
   lead: '📻 Retro lead',
 };
 const BASS_LABEL: Record<BassSound, string> = { round: 'Round', sub: 'Deep sub', pluck: 'Plucky' };
-const KIT_LABEL: Record<(typeof FULL_KITS)[number], string> = { acoustic: '🎙 Acoustic', dusty: 'Dusty (synth)', soft: 'Soft (synth)' };
+export const KIT_LABEL: Record<(typeof FULL_KITS)[number], string> = { acoustic: '🎙 Acoustic', dusty: 'Dusty (synth)', soft: 'Soft (synth)' };
 
 function Field(props: { label: string; children: React.ReactNode; title?: string }) {
   return (
@@ -60,12 +61,13 @@ export function BeatSoundControls() {
               ? p.drums.kick.sound.id
               : ''
           }
-          onChange={(e) =>
+          onChange={(e) => {
             update((d) => {
               // only swaps built-in rows; imported samples stay put
               for (const r of DRUM_ROWS) if (d.drums[r].sound.kind === 'synth') d.drums[r].sound = { kind: 'synth', id: e.target.value as SynthKit };
-            })
-          }
+            });
+            void previewKit();
+          }}
         >
           <option value="" disabled>
             Mixed
@@ -79,7 +81,10 @@ export function BeatSoundControls() {
       </Field>
       {/* bass mute and volume are on the Bass row in the grid, like every other row */}
       <Field label="Bass sound">
-        <select className="select text-xs py-1" value={p.bass.sound} onChange={(e) => update((d) => void (d.bass.sound = e.target.value as BassSound))}>
+        <select className="select text-xs py-1" value={p.bass.sound} onChange={(e) => {
+            update((d) => void (d.bass.sound = e.target.value as BassSound));
+            void previewBass();
+          }}>
           {BASS_SOUNDS.map((s) => (
             <option key={s} value={s}>
               {BASS_LABEL[s]}
@@ -98,7 +103,10 @@ export function ChordSoundControls() {
   return (
     <>
       <Field label="Chord sound">
-        <select className="select text-xs py-1" value={p.chords.sound} onChange={(e) => update((d) => void (d.chords.sound = e.target.value as KeysSound))}>
+        <select className="select text-xs py-1" value={p.chords.sound} onChange={(e) => {
+            update((d) => void (d.chords.sound = e.target.value as KeysSound));
+            void previewChordSound();
+          }}>
           {KEYS_SOUNDS.map((k) => (
             <option key={k} value={k}>
               {KEYS_LABEL[k]}
@@ -127,7 +135,10 @@ export function MelodySoundControls() {
   return (
     <>
       <Field label={p.extraMelodies.length ? `${melodyName(p, melodyId)} sound` : 'Melody sound'}>
-        <select className="select text-xs py-1" value={mel.sound} onChange={(e) => editMelody((m) => void (m.sound = e.target.value as MelodySound))}>
+        <select className="select text-xs py-1" value={mel.sound} onChange={(e) => {
+            editMelody((m) => void (m.sound = e.target.value as MelodySound));
+            void previewMelody(melodyId);
+          }}>
           {MELODY_SOUNDS.map((s) => (
             <option key={s} value={s}>
               {MELODY_LABEL[s]}
@@ -137,11 +148,17 @@ export function MelodySoundControls() {
       </Field>
       <div className="flex items-center gap-1" title="Move the whole melody up or down an octave">
         <span className="text-xs font-bold text-cream-500">Octave</span>
-        <button className="btn px-2 py-0.5 text-xs" disabled={mel.octave <= 3} onClick={() => editMelody((m) => void (m.octave -= 1))} aria-label="Octave down">
+        <button className="btn px-2 py-0.5 text-xs" disabled={mel.octave <= 3} onClick={() => {
+            editMelody((m) => void (m.octave -= 1));
+            void previewMelody(melodyId);
+          }} aria-label="Octave down">
           −
         </button>
         <span className="text-xs font-bold w-4 text-center">{mel.octave}</span>
-        <button className="btn px-2 py-0.5 text-xs" disabled={mel.octave >= 5} onClick={() => editMelody((m) => void (m.octave += 1))} aria-label="Octave up">
+        <button className="btn px-2 py-0.5 text-xs" disabled={mel.octave >= 5} onClick={() => {
+            editMelody((m) => void (m.octave += 1));
+            void previewMelody(melodyId);
+          }} aria-label="Octave up">
           +
         </button>
       </div>

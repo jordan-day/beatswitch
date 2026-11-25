@@ -196,7 +196,7 @@ export default function App() {
       if (typing || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return;
       const ui = useUi.getState();
       if (e.key === 'Escape' && ui.helpOpen) return closeHelp();
-      if (ui.helpOpen) return;
+      if (ui.helpOpen || document.querySelector('[role=dialog][aria-modal=true]')) return;
       if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();

@@ -317,6 +317,54 @@ export class Graph {
     v?.voice.play([note], dur, Tone.now(), 0.75);
   }
 
+  /** A two-bar taste of a beat (chords + a simple groove) at its tempo and swing, for the new-beat wizard. */
+  previewDemo(p: Project) {
+    const sd = stepSeconds(p.bpm);
+    const t0 = Tone.now() + 0.05;
+    const late = (i: number) => (i % 2 === 1 ? sd * (p.swing / 100) * 0.5 : 0); // rough swing on the off-16ths
+    const chords = p.chords.slots.filter((c): c is NonNullable<typeof c> => !!c);
+    for (let b = 0; b < 2; b++) {
+      const chord = chords[b % Math.max(1, chords.length)];
+      if (chord) this.preview(chord, t0 + b * 16 * sd, 16 * sd * 0.95);
+    }
+    for (let i = 0; i < 32; i++) {
+      const s = i % 16;
+      const t = t0 + i * sd + late(i);
+      if (s === 0 || s === 10) this.drums.kick?.voice.trigger(t, s === 0 ? 0.95 : 0.7);
+      if (s === 4 || s === 12) this.drums.snare?.voice.trigger(t, 0.85);
+      if (s % 2 === 0) this.drums.hat?.voice.trigger(t, s % 4 === 0 ? 0.8 : 0.55);
+    }
+  }
+
+  /** Hear the drum kit: kick, snare, then a couple of hats. */
+  previewKit() {
+    const t = Tone.now() + 0.03;
+    this.drums.kick?.voice.trigger(t, 0.9);
+    this.drums.snare?.voice.trigger(t + 0.3, 0.8);
+    this.drums.hat?.voice.trigger(t + 0.6, 0.7);
+    this.drums.hat?.voice.trigger(t + 0.75, 0.55);
+  }
+
+  /** Hear the bass sound: the first chord's root, then its fifth. */
+  previewBass(p: Project) {
+    const chord = p.chords.slots.find((s) => s);
+    if (!chord) return;
+    const t = Tone.now() + 0.03;
+    const root = bassNote(chord, 1);
+    const fifth = bassNote(chord, 2);
+    if (root) this.bass?.triggerAttackRelease(root, 0.4, t, 0.8);
+    if (fifth) this.bass?.triggerAttackRelease(fifth, 0.4, t + 0.45, 0.8);
+  }
+
+  /** Hear a melody's instrument: three notes up its scale. */
+  previewMelody(p: Project, melodyId: string) {
+    const track = allMelodies(p).find((m) => m.id === melodyId)?.track;
+    const voice = this.melodies.get(melodyId)?.voice;
+    if (!track || !voice) return;
+    const t = Tone.now() + 0.03;
+    [0, 2, 4].forEach((d, i) => voice.play([degreeNote(p.tonic, p.mood, track.octave, d)], 0.5, t + i * 0.22, 0.75));
+  }
+
   /**
    * Play step `step` of the whole song (the arrangement) at `time`.
    * Returns where it fell, or null past the end of the song.

@@ -48,29 +48,42 @@ async function render(p: Project, steps: number, play: (g: Graph, step: number, 
   const audio = rendered.get();
   if (!audio) throw new Error('Rendering failed');
   const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
-  return new Blob([encodeWav(channels, audio.sampleRate)], { type: 'audio/wav' });
+  return { channels, sampleRate: audio.sampleRate };
 }
 
-/** `loops` passes of the section being edited, as a WAV. */
-export function renderWav(p: Project, loops = 4): Promise<Blob> {
+export type AudioFormat = 'wav' | 'mp3';
+type Rendered = Awaited<ReturnType<typeof render>>;
+
+async function encode(r: Rendered, format: AudioFormat): Promise<Blob> {
+  if (format === 'mp3') return (await import('./mp3')).encodeMp3(r.channels, r.sampleRate);
+  return new Blob([encodeWav(r.channels, r.sampleRate)], { type: 'audio/wav' });
+}
+
+/** `loops` passes of the section being edited. */
+export function renderLoop(p: Project, loops = 4): Promise<Rendered> {
   const loopSteps = p.bars * STEPS_PER_BAR;
   return render(p, loopSteps * loops, (g, step, time) => g.scheduleStep(step % loopSteps, time, p), false);
 }
 
-/** The whole song (arrangement, fills, part mutes and fades), as a WAV. */
-export function renderSong(p: Project): Promise<Blob> {
+/** The whole song (arrangement, fills, part mutes and fades). */
+export function renderSong(p: Project): Promise<Rendered> {
   return render(p, songSteps(p), (g, step, time) => void g.scheduleSongStep(step, time, p), true);
 }
 
 /**
- * The exported file: the whole song (or, with `loops`, just the section being edited).
- * On the web: the WAV itself. In a Claude artifact, .wav isn't an allowed download type,
- * so the same WAV goes inside an uncompressed .zip (no quality lost).
+ * The exported file: the whole song (or, with `loops`, just the section being edited), as a WAV or MP3.
+ * On the web: the audio file itself. In a Claude artifact, .wav/.mp3 aren't allowed download types,
+ * so the same audio goes inside an uncompressed .zip (no quality lost).
  */
-export async function exportFile(p: Project, opts: { loops?: number; asZip?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
-  const wav = opts.loops || songSteps(p) === 0 ? await renderWav(p, opts.loops ?? 4) : await renderSong(p);
+export async function exportFile(
+  p: Project,
+  opts: { format?: AudioFormat; loops?: number; asZip?: boolean } = {},
+): Promise<{ blob: Blob; filename: string }> {
+  const format = opts.format ?? 'wav';
+  const rendered = opts.loops || songSteps(p) === 0 ? await renderLoop(p, opts.loops ?? 4) : await renderSong(p);
+  const audio = await encode(rendered, format);
   const base = safeName(p.name);
-  if (!opts.asZip) return { blob: wav, filename: `${base}.wav` };
-  const zipped = zipSingleFile(`${base}.wav`, new Uint8Array(await wav.arrayBuffer()));
+  if (!opts.asZip) return { blob: audio, filename: `${base}.${format}` };
+  const zipped = zipSingleFile(`${base}.${format}`, new Uint8Array(await audio.arrayBuffer()));
   return { blob: new Blob([zipped as Uint8Array<ArrayBuffer>], { type: 'application/zip' }), filename: `${base}.zip` };
 }

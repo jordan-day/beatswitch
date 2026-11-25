@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { keyLabel, MOOD_INFO, TONICS } from '../music/chords';
+import { previewKey } from '../audio/engine';
 import { useProject } from '../state/project';
 import { MOODS } from '../state/types';
 import { LofiPanel } from './LofiPanel';
@@ -26,7 +27,10 @@ function SettingsContent() {
             <button
               key={m}
               className={'chip text-xs px-2 ' + (p.mood === m ? 'chip-on' : '')}
-              onClick={() => setKeyMood(p.tonic, m)}
+              onClick={() => {
+                setKeyMood(p.tonic, m);
+                void previewKey();
+              }}
               title={MOOD_INFO[m].blurb}
             >
               {MOOD_INFO[m].emoji} {MOOD_INFO[m].label}
@@ -35,7 +39,10 @@ function SettingsContent() {
         </div>
         <label className="flex items-center justify-between gap-2" title="How high or low the whole song sits. Any key sounds fine!">
           <span className="text-sm font-bold">Key</span>
-          <select className="select" value={p.tonic} onChange={(e) => setKeyMood(e.target.value, p.mood)}>
+          <select className="select" value={p.tonic} onChange={(e) => {
+              setKeyMood(e.target.value, p.mood);
+              void previewKey();
+            }}>
             {TONICS.map((t) => (
               <option key={t} value={t}>
                 {keyLabel(t, p.mood)}

@@ -181,6 +181,61 @@ export async function previewProgression(chords: (ChordSlot | string | null)[]) 
   chords.forEach((c, i) => c && g.preview(c, now + i * 0.75, 0.7));
 }
 
+/**
+ * Hear a sound right after changing it (key, kit, instrument). Waits a beat so the audio graph
+ * has swapped to the new sound (recorded instruments and kits load in the background).
+ */
+async function previewSoon(play: (g: Graph, p: Project) => void) {
+  const g = await ensureAudio();
+  await new Promise((r) => setTimeout(r, 140));
+  play(g, useProject.getState().project);
+}
+
+export const previewKit = () => previewSoon((g) => g.previewKit());
+export const previewBass = () => previewSoon((g, p) => g.previewBass(p));
+export const previewMelody = (melodyId: string) => previewSoon((g, p) => g.previewMelody(p, melodyId));
+/** Hear the key: the first few chords of the progression. */
+export const previewKey = () =>
+  previewSoon((g, p) => {
+    const now = Tone.now() + 0.03;
+    p.chords.slots
+      .filter((c): c is ChordSlot => !!c)
+      .slice(0, 4)
+      .forEach((c, i) => g.preview(c, now + i * 0.55, 0.6));
+  });
+/** Hear the chord instrument: the first chord. */
+export const previewChordSound = () =>
+  previewSoon((g, p) => {
+    const c = p.chords.slots.find((s) => s);
+    if (c) g.preview(c);
+  });
+
+/**
+ * New-beat wizard previews: hear a draft beat's sounds without touching the open beat.
+ * The audio graph is switched to the draft for a moment; `restoreAudio` puts the open beat's sounds back.
+ */
+let auditioningDraft = false;
+async function withDraft(draft: Project, play: (g: Graph) => void) {
+  const g = await ensureAudio();
+  auditioningDraft = true;
+  await loadProjectBuiltins(draft);
+  g.apply(draft);
+  await new Promise((r) => setTimeout(r, 60));
+  play(g);
+}
+export const previewDraftChords = (draft: Project) =>
+  withDraft(draft, (g) => {
+    const now = Tone.now() + 0.03;
+    draft.chords.slots.filter((c): c is ChordSlot => !!c).slice(0, 4).forEach((c, i) => g.preview(c, now + i * 0.55, 0.6));
+  });
+export const previewDraftKit = (draft: Project) => withDraft(draft, (g) => g.previewKit());
+export const previewDraftDemo = (draft: Project) => withDraft(draft, (g) => g.previewDemo(draft));
+export function restoreAudio() {
+  if (!graph || !auditioningDraft) return;
+  auditioningDraft = false;
+  graph.apply(useProject.getState().project);
+}
+
 /** Hear a single note (piano roll / chord keyboard). */
 export async function previewNote(note: string, kind: 'melody' | 'keys' = 'melody', melodyId?: string) {
   const g = await ensureAudio();

@@ -3,7 +3,7 @@ import { useProject } from '../state/project';
 import type { FxSettings } from '../state/types';
 import { Slider } from './common';
 
-function describe(v: number) {
+export function describeLofi(v: number) {
   if (v < 0.15) return 'Crisp & clean';
   if (v < 0.35) return 'A little dusty';
   if (v < 0.55) return 'Cozy cassette';
@@ -30,7 +30,7 @@ export function LofiPanel() {
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
         <span className="font-extrabold">📼 Lo-fi-ness</span>
-        <span className="text-xs font-bold text-snare">{describe(fx.lofi)}</span>
+        <span className="text-xs font-bold text-snare">{describeLofi(fx.lofi)}</span>
       </div>
       <input
         type="range"

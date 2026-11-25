@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { PROGRESSIONS, progressionChords, transposeSlot } from '../music/chords';
+import { generateMelody } from '../music/melody';
 import { buildPreset } from '../music/presets';
 import { extendMelody, extendSteps, lofiMacro, randomDrums, rhythmToSteps } from '../music/patterns';
+import { saveProject } from '../storage/local';
 import { parseProject } from './schema';
 import { applyPatterns, extractPatterns, MAX_REPEATS, newId, nextSectionName, noMutes, type Part } from './song';
 import { drumTrack, isDrumRow, MAIN_MELODY, melodyTrack } from './tracks';
@@ -22,15 +24,19 @@ import {
 } from './types';
 
 const AUTOSAVE_KEY = 'beatswitch:autosave';
+const BEAT_ID_KEY = 'beatswitch:beat-id';
 const HISTORY_LIMIT = 100;
 
 interface ProjectStore {
   project: Project;
+  /** Which entry of the beats library the current beat is autosaved to. */
+  beatId: string;
   past: Project[];
   future: Project[];
   /** Apply an edit. Edits with the same `coalesceKey` within 600ms merge into one undo step (for sliders). */
   update: (fn: (p: Project) => void, coalesceKey?: string) => void;
-  load: (p: Project) => void;
+  /** Replace the current beat. Pass `id` when opening a beat from the library; otherwise it becomes a new beat. */
+  load: (p: Project, id?: string) => void;
   undo: () => void;
   redo: () => void;
 
@@ -56,6 +62,8 @@ interface ProjectStore {
   addMelody: () => string;
   removeMelody: (id: string) => void;
   randomize: () => void;
+  /** Replace a melody's notes with a new one that fits the key and chords. */
+  randomizeMelody: (melody: string) => void;
   setBars: (bars: 1 | 2 | 4) => void;
   setLofi: (v: number) => void;
   setFx: (key: keyof Omit<FxSettings, 'lofi'>, v: number) => void;
@@ -93,6 +101,22 @@ function switchTo(p: Project, id: string) {
 
 let lastCoalesce = { key: '', at: 0 };
 
+function initialBeatId(): string {
+  try {
+    const id = localStorage.getItem(BEAT_ID_KEY);
+    if (id) return id;
+  } catch {
+    /* storage blocked */
+  }
+  return crypto.randomUUID();
+}
+
+/** True once the current beat has been edited since it was opened, so just opening a beat doesn't add it to the library. */
+let edited = false;
+
+/** Which library entry each project snapshot belongs to, so undo/redo across a "new beat" keeps ids straight. */
+const ids = new WeakMap<Project, string>();
+
 function initialProject(): Project {
   try {
     const raw = localStorage.getItem(AUTOSAVE_KEY);
@@ -108,11 +132,13 @@ function initialProject(): Project {
 
 export const useProject = create<ProjectStore>((set, get) => ({
   project: initialProject(),
+  beatId: initialBeatId(),
   past: [],
   future: [],
 
   update: (fn, coalesceKey) => {
     const { project, past } = get();
+    edited = true;
     const next = structuredClone(project);
     fn(next);
     // a click that changes nothing (same mood, same rhythm...) shouldn't add an undo step
@@ -120,6 +146,7 @@ export const useProject = create<ProjectStore>((set, get) => ({
     const now = Date.now();
     const merge = coalesceKey && lastCoalesce.key === coalesceKey && now - lastCoalesce.at < 600;
     lastCoalesce = { key: coalesceKey ?? '', at: now };
+    ids.set(next, get().beatId);
     set({
       project: next,
       past: merge ? past : [...past, project].slice(-HISTORY_LIMIT),
@@ -127,21 +154,28 @@ export const useProject = create<ProjectStore>((set, get) => ({
     });
   },
 
-  load: (p) => {
+  load: (p, id) => {
     const { project, past } = get();
-    set({ project: p, past: [...past, project].slice(-HISTORY_LIMIT), future: [] });
+    edited = false;
+    const beatId = id ?? crypto.randomUUID();
+    ids.set(p, beatId);
+    set({ project: p, beatId, past: [...past, project].slice(-HISTORY_LIMIT), future: [] });
   },
 
   undo: () => {
     const { past, project, future } = get();
     if (!past.length) return;
-    set({ project: past[past.length - 1], past: past.slice(0, -1), future: [project, ...future] });
+    edited = true;
+    const target = past[past.length - 1];
+    set({ project: target, beatId: ids.get(target) ?? get().beatId, past: past.slice(0, -1), future: [project, ...future] });
   },
 
   redo: () => {
     const { past, project, future } = get();
     if (!future.length) return;
-    set({ project: future[0], past: [...past, project], future: future.slice(1) });
+    edited = true;
+    const target = future[0];
+    set({ project: target, beatId: ids.get(target) ?? get().beatId, past: [...past, project], future: future.slice(1) });
   },
 
   toggleStep: (row, i) =>
@@ -174,6 +208,12 @@ export const useProject = create<ProjectStore>((set, get) => ({
       for (const row of Object.keys(r) as DrumRow[]) p.drums[row].steps = r[row];
       // bass follows the kick, mostly roots with the odd fifth
       p.bass.steps = r.kick.map((s, i) => (s ? (i % 16 >= 8 && Math.random() < 0.4 ? 2 : 1) : 0));
+    }),
+
+  randomizeMelody: (melody) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (m) m.notes = generateMelody(p);
     }),
 
   setBars: (bars) =>
@@ -392,7 +432,9 @@ export const useProject = create<ProjectStore>((set, get) => ({
   setFade: (which, on) => get().update((p) => void (p[which] = on)),
 }));
 
-// Autosave (debounced) to localStorage.
+ids.set(useProject.getState().project, useProject.getState().beatId);
+
+// Autosave (debounced): the current beat to localStorage (instant restore), and, once edited, into the beats library.
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 useProject.subscribe((s, prev) => {
   if (s.project === prev.project || typeof localStorage === 'undefined') return;
@@ -400,9 +442,11 @@ useProject.subscribe((s, prev) => {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(s.project));
+      localStorage.setItem(BEAT_ID_KEY, s.beatId);
     } catch {
       /* storage full or blocked */
     }
+    if (edited) saveProject(s.project, s.beatId).catch(() => undefined);
   }, 400);
 });
 
