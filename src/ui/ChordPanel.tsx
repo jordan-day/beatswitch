@@ -23,6 +23,7 @@ import { useProject, useUi, withUndo } from '../state/project';
 import { STEPS_PER_BAR, type ChordRhythm, type ChordSlot } from '../state/types';
 import { EditorHeader } from './EditorHeader';
 import { MiniKeyboard } from './MiniKeyboard';
+import { ChordSoundControls } from './SoundControls';
 
 /** The Chords editor: chord slots + the selected chord's notes on the left, "what to play" ideas on the right. */
 export function ChordPanel() {
@@ -38,6 +39,7 @@ export function ChordPanel() {
   return (
     <>
       <EditorHeader>
+        <ChordSoundControls />
         <RhythmPicker />
         <ProgressionPicker />
         <div className="flex rounded-lg bg-ink-700 p-0.5" title="How many chord changes per loop">

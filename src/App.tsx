@@ -6,11 +6,11 @@ import { ChordPanel } from './ui/ChordPanel';
 import { useSamples } from './ui/common';
 import { DrumGrid } from './ui/DrumGrid';
 import { ErrorBoundary } from './ui/ErrorBoundary';
-import { Inspector } from './ui/Inspector';
+import { SettingsMenu } from './ui/Inspector';
 import { MelodyRoll } from './ui/MelodyRoll';
 import { Overview } from './ui/Overview';
 import { ProjectMenu } from './ui/ProjectMenu';
-import { SongEditor } from './ui/SongEditor';
+import { SectionPicker, SongEditor } from './ui/SongEditor';
 import { Transport } from './ui/Transport';
 
 const TOUR_KEY = 'beatswitch:tour-done';
@@ -40,7 +40,7 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open 🎼 Song (above the editor) to add sections (Intro, Verse, Chorus…) and line them up. Next to ▶, pick "Whole song" to hear it all.'],
+    ['🎼', 'Build a song', 'Open the 🎼 Song arrangement tab to add sections (Intro, Verse, Chorus…) and line them up. Next to ▶, pick "Whole song" to hear it all.'],
     ['📼', 'Set the vibe', 'On the right: pick a mood and key, and turn up the Lo-fi knob.'],
   ];
   return (
@@ -130,24 +130,20 @@ function FloatingPlay() {
   );
 }
 
-/**
- * The two levels of the app: editing one section (its overview + Beat/Chords/Melody editors),
- * or arranging sections into the whole song.
- */
+/** The two views: editing a section, or arranging sections into the whole song. */
 function ViewTabs() {
   const view = useUi((s) => s.view);
   const set = useUi((s) => s.set);
   const p = useProject((s) => s.project);
   const section = p.sections.find((s) => s.id === p.activeSection)?.name ?? 'Section';
-  const blocks = p.song.length;
   const tab = (active: boolean) =>
     'flex items-center gap-2 px-3.5 py-1 rounded-xl text-[13px] font-extrabold transition ' +
     (active ? 'bg-ink-800 text-cream-100 border border-ink-600 shadow' : 'text-cream-500 hover:text-cream-100 hover:bg-ink-800/60');
   return (
     <div role="tablist" aria-label="View" className="flex gap-1 shrink-0">
-      <button role="tab" aria-selected={view === 'section'} className={tab(view === 'section')} onClick={() => set({ view: 'section' })}>
-        🎛 Section
-        <span className="text-xs font-bold text-cream-500 normal-case">· {section}</span>
+      <button role="tab" aria-selected={view === 'editor'} className={tab(view === 'editor')} onClick={() => set({ view: 'editor' })}>
+        🎛 Editor
+        <span className="text-xs font-bold text-cream-500">· {section}</span>
       </button>
       <button
         role="tab"
@@ -156,10 +152,8 @@ function ViewTabs() {
         onClick={() => set({ view: 'song' })}
         title="Line up your sections into a full song (key 4)"
       >
-        🎼 Song
-        <span className="text-xs font-bold text-cream-500">
-          · {p.sections.length} section{p.sections.length > 1 ? 's' : ''}, {blocks} block{blocks === 1 ? '' : 's'}
-        </span>
+        🎼 Song arrangement
+        <span className="text-xs font-bold text-cream-500">· {p.song.length} block{p.song.length === 1 ? '' : 's'}</span>
       </button>
     </div>
   );
@@ -168,7 +162,7 @@ function ViewTabs() {
 function Editor() {
   const track = useUi((s) => s.track);
   return (
-    <section className="card p-3 sm:p-4 flex flex-col min-h-0 lg:flex-1" aria-label="Editor">
+    <section className="card p-3 sm:p-4 flex flex-col min-h-[26rem] lg:flex-1" aria-label="Editor">
       {/* keyed by tab, so switching tabs also clears a crashed editor */}
       <ErrorBoundary key={track} name={`${{ beat: 'Beat', chords: 'Chords', melody: 'Melody' }[track]} editor`}>
         {track === 'beat' && <DrumGrid />}
@@ -180,6 +174,7 @@ function Editor() {
 }
 
 export default function App() {
+  const view = useUi((s) => s.view);
   // Load a shared beat from the URL (#b=...), once.
   useEffect(() => {
     if (window.location.hash.startsWith('#b=')) {
@@ -193,9 +188,7 @@ export default function App() {
     useSamples.getState().refresh();
   }, []);
 
-  const view = useUi((s) => s.view);
-
-  // Keyboard: Space = play/stop, 1/2/3 = section editors, 4 = song, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
+  // Keyboard: Space = play/stop, 1/2/3 = beat/chords/melody editors, 4 = song arrangement, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y = undo/redo, Esc closes help
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
@@ -208,7 +201,7 @@ export default function App() {
         e.preventDefault();
         togglePlay();
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && TRACK_KEYS[e.key]) {
-        ui.set({ view: 'section', track: TRACK_KEYS[e.key] });
+        ui.set({ view: 'editor', track: TRACK_KEYS[e.key] });
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '4') {
         ui.set({ view: 'song' });
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -224,9 +217,9 @@ export default function App() {
   }, []);
 
   return (
-    // Desktop: a fixed one-screen workspace (no page scrolling). Small screens: stacks and scrolls.
-    <div className="lg:h-full flex flex-col gap-3 p-3 pb-24 lg:pb-3 max-w-[1600px] mx-auto">
-      <header className="card p-3 sm:p-3 shrink-0 flex flex-wrap items-center gap-x-3 gap-y-3">
+    // Desktop: a one-screen workspace; short windows scroll the left column.
+    <div className="lg:h-screen flex flex-col gap-2 p-2 pb-24 lg:pb-2 max-w-[1600px] mx-auto">
+      <header className="card p-3 sm:p-3 shrink-0 flex flex-wrap items-center gap-x-2 gap-y-3">
         <div className="flex items-center gap-2">
           <span className="text-2xl">📼</span>
           <span className="text-xl font-black tracking-tight">
@@ -234,13 +227,14 @@ export default function App() {
           </span>
         </div>
         <Transport />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          <SettingsMenu />
           <ProjectMenu />
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 grid lg:grid-cols-[minmax(0,1fr)_272px] gap-3">
-        <main className="flex flex-col gap-2 min-h-0 min-w-0">
+      <div className="flex-1 min-h-0 grid gap-2">
+        <main className="flex flex-col gap-2 min-h-0 min-w-0 lg:overflow-y-auto">
           <ViewTabs />
           {view === 'song' ? (
             <ErrorBoundary name="song arrangement">
@@ -248,6 +242,7 @@ export default function App() {
             </ErrorBoundary>
           ) : (
             <>
+              <SectionPicker />
               <ErrorBoundary name="section overview">
                 <Overview />
               </ErrorBoundary>
@@ -255,9 +250,6 @@ export default function App() {
             </>
           )}
         </main>
-        <ErrorBoundary name="settings panel">
-          <Inspector />
-        </ErrorBoundary>
       </div>
 
       <FloatingPlay />

@@ -7,7 +7,7 @@ import { useProject, useUi, withUndo } from '../state/project';
 import { allMelodies, MAIN_MELODY, melodyColor, melodyName, melodyTrack } from '../state/tracks';
 import { MAX_EXTRA_MELODIES, MELODY_ROWS, STEPS_PER_BAR } from '../state/types';
 import { EditorHeader } from './EditorHeader';
-import { MELODY_LABEL } from './Inspector';
+import { MELODY_LABEL, MelodySoundControls } from './SoundControls';
 
 // rows share the editor's height: at least 14px (short laptops), at most 30px (big screens)
 const ROWS_TEMPLATE = `repeat(${MELODY_ROWS}, minmax(14px, 30px))`;
@@ -97,6 +97,7 @@ export function MelodyRoll() {
   return (
     <>
       <EditorHeader>
+        <MelodySoundControls />
         {m.mute && <span className="text-xs font-bold text-kick">🔇 {name} is muted</span>}
         <button
           className="btn text-xs"

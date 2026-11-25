@@ -72,6 +72,7 @@ interface ProjectStore {
   moveBlock: (index: number, by: -1 | 1) => void;
   /** Move block `from` so it lands before the block currently at `to` (`to` = song length: the end). */
   moveBlockTo: (from: number, to: number) => void;
+  duplicateBlock: (index: number) => void;
   setRepeats: (index: number, repeats: number) => void;
   toggleBlockMute: (index: number, part: Part) => void;
   toggleFill: (index: number) => void;
@@ -367,6 +368,12 @@ export const useProject = create<ProjectStore>((set, get) => ({
       [p.song[i], p.song[j]] = [p.song[j], p.song[i]];
     }),
 
+  duplicateBlock: (i) =>
+    get().update((p) => {
+      const b = p.song[i];
+      if (b) p.song.splice(i + 1, 0, { ...b, id: newId(), mute: { ...b.mute } });
+    }),
+
   moveBlockTo: (from, to) =>
     get().update((p) => {
       if (from < 0 || from >= p.song.length) return;
@@ -403,8 +410,8 @@ export type Track = 'beat' | 'chords' | 'melody';
 
 /** Small UI-only state that shouldn't go into undo history or saves. */
 interface UiStore {
-  /** Editing one section (overview + Beat/Chords/Melody), or arranging the whole song. */
-  view: 'section' | 'song';
+  /** The editor (section picker + overview + Beat/Chords/Melody), or the song arrangement. */
+  view: 'editor' | 'song';
   playing: boolean;
   /** Play loops the section being edited, or plays the whole arrangement once. */
   playMode: 'section' | 'song';
@@ -423,7 +430,7 @@ interface UiStore {
 }
 
 export const useUi = create<UiStore>((set) => ({
-  view: 'section',
+  view: 'editor',
   playing: false,
   playMode: 'section',
   loopBar: false,

@@ -5,7 +5,7 @@ import { Slider } from './common';
 
 /**
  * What the Play button plays: the section you're editing, looping, or the whole song once.
- * Worded "Loop / Whole song" so it isn't confused with the Section / Song view tabs.
+ * Worded "Loop / Whole song".
  */
 function PlayMode() {
   const mode = useUi((s) => s.playMode);

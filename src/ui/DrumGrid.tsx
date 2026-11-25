@@ -5,6 +5,7 @@ import { drumTrack, EXTRA_DRUM_COLORS, isDrumRow } from '../state/tracks';
 import { DRUM_ROWS, MAX_EXTRA_DRUMS, STEPS_PER_BAR, SYNTH_KITS, type DrumRow, type ExtraDrum, type Project, type SynthKit } from '../state/types';
 import { useSamples } from './common';
 import { EditorHeader } from './EditorHeader';
+import { BeatSoundControls } from './SoundControls';
 
 type RowId = DrumRow | 'bass' | 'chords';
 const BASS_LABEL = ['', 'R', '5', '8'];
@@ -76,22 +77,12 @@ export function DrumGrid() {
   return (
     <>
       <EditorHeader>
+        <BeatSoundControls />
         {project.bars > 1 && (
           <button className="btn text-xs" onClick={copyToAll} title="Copy this bar into every other bar">
             ⧉ Copy bar to all
           </button>
         )}
-        <button
-          className="btn text-xs"
-          onClick={() => {
-            ensureAudio();
-            addDrum();
-          }}
-          disabled={!canAdd}
-          title={canAdd ? 'Add another drum sound to the pad' : `Up to ${MAX_EXTRA_DRUMS} added drums`}
-        >
-          ＋ Add drum
-        </button>
         <button
           className="btn text-xs"
           onClick={() => withUndo('New drum pattern 🎲', randomize)}
@@ -136,6 +127,18 @@ export function DrumGrid() {
               />
             );
           })}
+          <button
+            className="btn shrink-0 self-start w-36 sm:w-48 h-3.5 p-0 text-xs leading-none opacity-40 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            onClick={() => {
+              ensureAudio();
+              addDrum();
+            }}
+            disabled={!canAdd}
+            aria-label="Add drum"
+            title={canAdd ? 'Add another drum sound to the pad' : `Up to ${MAX_EXTRA_DRUMS} added drums`}
+          >
+            ＋
+          </button>
           <div className="border-t border-ink-600/60 shrink-0" />
           <Row
             row="bass"
@@ -153,7 +156,7 @@ export function DrumGrid() {
           <p className="text-xs text-cream-500 mt-1 shrink-0 sticky left-0 max-w-[calc(100vw-3.5rem)]">
             Click a square to add a hit, again for a <b className="text-cream-300">louder</b> hit, again to remove. Bass cycles{' '}
             <b className="text-cream-300">R</b> root → <b className="text-cream-300">5</b> fifth → <b className="text-cream-300">8</b> octave →
-            off. Drop a .wav/.mp3 on a drum name to use your own sound, or <b className="text-cream-300">＋ Add drum</b> for another row.
+            off. Drop a .wav/.mp3 on a drum name to use your own sound, or press <b className="text-cream-300">＋</b> under the drums for another row.
           </p>
         </div>
       </div>
@@ -188,7 +191,7 @@ function Row(props: {
   };
 
   return (
-    <div className="flex items-stretch gap-2 flex-1 min-h-[26px] max-h-[60px]">
+    <div className="flex items-stretch gap-2 flex-1 min-h-[22px] max-h-[60px]">
       <div
         className={
           // narrower on phones so more of the grid fits; the volume slider hides there too

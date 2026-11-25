@@ -4,7 +4,6 @@ import { useProject, useUi, withUndo } from '../state/project';
 import {
   buildTimeline,
   formatTime,
-  MAX_REPEATS,
   PARTS,
   sectionBars,
   sectionColor,
@@ -35,52 +34,82 @@ export function SongEditor() {
   const seconds = songSteps(p) * stepSeconds(p.bpm);
 
   return (
-    <section className="card p-3 sm:p-4 flex flex-col min-h-0 lg:flex-1" aria-label="Song arrangement">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <h2 className="text-lg font-extrabold mr-2">🎼 Song</h2>
-        <span className="text-xs text-cream-500" title="Total length of the arrangement">
-          <b className="text-cream-100">{formatTime(seconds)}</b> · {songBars(p)} bars
+    <section className="card p-4 flex flex-col gap-5 shrink-0" aria-label="Song arrangement">
+      {/* ---- sections: click one to edit it ---- */}
+      <div className="flex flex-col gap-2">
+        <span className="label shrink-0" title="Click a section to edit it. Drag one into the arrangement to add it.">
+          Sections
         </span>
-        <Toggle on={p.fadeIn} onClick={() => setFade('fadeIn', !p.fadeIn)} title="Fade in over the first 2 bars">
-          Fade in
-        </Toggle>
-        <Toggle on={p.fadeOut} onClick={() => setFade('fadeOut', !p.fadeOut)} title="Fade out over the last 4 bars">
-          Fade out
-        </Toggle>
-        <span className="text-[11px] text-cream-500 ml-auto">To hear it: pick 🎼 Whole song next to ▶ at the top.</span>
+        <div className="flex flex-wrap gap-2 min-w-0">
+          {p.sections.map((s) => (
+            <SectionCard key={s.id} id={s.id} />
+          ))}
+          <button
+            className="rounded-xl border-2 border-dashed border-ink-600 px-4 py-2 text-sm font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500"
+            onClick={() => withUndo('New section added (a copy of the one you were on)', addSection)}
+            title="Add a section: it starts as a copy of the section you're editing"
+          >
+            ＋ New section
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1 flex flex-col gap-3">
-        {/* ---- sections ---- */}
-        <div>
-          <div className="flex items-baseline gap-2 mb-1.5">
-            <span className="label">Sections</span>
-            <span className="text-[11px] text-cream-500">Each section is its own loop. ✏️ Edit opens its beat, chords and melody. Drag one into the arrangement to add it.</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {p.sections.map((s) => (
-              <SectionCard key={s.id} id={s.id} />
-            ))}
-            <button
-              className="rounded-xl border-2 border-dashed border-ink-600 px-4 py-2 text-sm font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500"
-              onClick={() => withUndo('New section added (a copy of the one you were on)', addSection)}
-              title="Add a section: it starts as a copy of the section you're editing"
-            >
-              ＋ New section
-            </button>
-          </div>
+      {/* ---- arrangement ---- */}
+      <div>
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <span className="label" title="Plays left to right. Drag blocks to reorder, or Copy one to repeat it.">
+            Arrangement · plays left to right, drag to reorder
+          </span>
+          <span className="text-xs text-cream-500" title="Total length of the arrangement">
+            <b className="text-cream-100">{formatTime(seconds)}</b> · {songBars(p)} bars
+          </span>
+          <Toggle on={p.fadeIn} onClick={() => setFade('fadeIn', !p.fadeIn)} title="Fade in over the first 2 bars">
+            Fade in
+          </Toggle>
+          <Toggle on={p.fadeOut} onClick={() => setFade('fadeOut', !p.fadeOut)} title="Fade out over the last 4 bars">
+            Fade out
+          </Toggle>
         </div>
+        <Arrangement />
+      </div>
+    </section>
+  );
+}
 
-        {/* ---- arrangement ---- */}
-        <div>
-          <div className="flex flex-wrap items-baseline gap-2 mb-1.5">
-            <span className="label">Arrangement</span>
-            <span className="text-[11px] text-cream-500">
-              Plays left to right. Drag blocks to reorder them. Switch parts off per block for intros, breakdowns and outros.
-            </span>
-          </div>
-          <Arrangement />
-        </div>
+/** The editor view's slim section picker: click a section to edit it. */
+export function SectionPicker() {
+  const p = useProject((s) => s.project);
+  const { switchSection, addSection } = useProject();
+  const set = useUi((s) => s.set);
+  return (
+    <section className="card p-2 sm:p-2.5 shrink-0 flex items-center gap-2" aria-label="Sections">
+      <span className="label shrink-0">Section</span>
+      <div className="flex flex-wrap gap-1.5 min-w-0">
+        {p.sections.map((s) => {
+          const on = s.id === p.activeSection;
+          return (
+            <button
+              key={s.id}
+              className={'rounded-lg border-2 pl-3 pr-2.5 py-1 text-sm font-extrabold ' + (on ? 'border-cream-100 bg-ink-700' : 'border-ink-600 bg-ink-900/60 hover:bg-ink-700')}
+              style={{ boxShadow: `inset 4px 0 0 ${sectionColor(p, s.id)}` }}
+              aria-pressed={on}
+              onClick={() => {
+                switchSection(s.id);
+                set({ viewBar: 0 });
+              }}
+              title={`Edit ${s.name}`}
+            >
+              {s.name}
+            </button>
+          );
+        })}
+        <button
+          className="rounded-lg border-2 border-dashed border-ink-600 px-3 py-1 text-xs font-bold text-cream-500 hover:text-cream-100 hover:border-cream-500"
+          onClick={() => withUndo('New section added (a copy of the one you were on)', addSection)}
+          title="Add a section: it starts as a copy of the section you're editing"
+        >
+          ＋ New section
+        </button>
       </div>
     </section>
   );
@@ -88,7 +117,7 @@ export function SongEditor() {
 
 function Toggle(props: { on: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
   return (
-    <button className={'chip text-xs ' + (props.on ? 'chip-on' : '')} onClick={props.onClick} aria-pressed={props.on} title={props.title}>
+    <button className={'chip text-xs py-0.5 ' + (props.on ? 'chip-on' : '')} onClick={props.onClick} aria-pressed={props.on} title={props.title}>
       {props.on ? '✓ ' : ''}
       {props.children}
     </button>
@@ -109,11 +138,17 @@ function SectionCard({ id }: { id: string }) {
   return (
     <div
       className={
-        'rounded-xl border-2 bg-ink-900/60 p-2 flex flex-col gap-1.5 w-52 cursor-grab active:cursor-grabbing ' +
+        'rounded-xl border-2 bg-ink-900/60 pl-4 pr-2 py-2 flex items-center gap-2 cursor-grab active:cursor-grabbing ' +
         (editing ? 'border-cream-100' : 'border-ink-600')
       }
       style={{ boxShadow: `inset 4px 0 0 ${sectionColor(p, id)}` }}
       draggable
+      onClick={(e) => {
+        // clicking the card (not its name box or buttons) picks it for editing
+        if ((e.target as HTMLElement).closest('input,button') || editing) return;
+        switchSection(id);
+        set({ viewBar: 0 });
+      }}
       onPointerDown={(e) => (fromInput.current = (e.target as HTMLElement).tagName === 'INPUT')}
       onDragStart={(e) => {
         if (fromInput.current) return e.preventDefault();
@@ -122,54 +157,43 @@ function SectionCard({ id }: { id: string }) {
         e.dataTransfer.setData('text/plain', s.name);
       }}
       onDragEnd={() => (dragged = null)}
-      title="Drag into the arrangement to add it to the song"
+      aria-current={editing}
+      title="Click to edit this section. Drag into the arrangement to add it to the song"
     >
-      <div className="flex items-center gap-1 pl-1.5">
-        <input
-          className="bg-transparent font-extrabold text-sm flex-1 min-w-0 rounded px-1 -mx-1 hover:bg-ink-700 focus:bg-ink-700"
-          value={s.name}
-          onChange={(e) => renameSection(id, e.target.value)}
-          aria-label="Section name"
-          title="Click to rename"
-        />
-        <span className="text-[10px] text-cream-500 shrink-0" title={`${sectionBars(p, id)}-bar loop, used ${uses}× in the song`}>
-          {sectionBars(p, id)} bar{sectionBars(p, id) > 1 ? 's' : ''} · {uses}×
-        </span>
-        {editing && <span className="text-[9px] font-bold text-ink-950 bg-cream-100 rounded px-1">EDITING</span>}
-      </div>
+      <input
+        className="bg-transparent font-extrabold text-base w-28 min-w-0 rounded px-1 -mx-1 hover:bg-ink-700 focus:bg-ink-700"
+        value={s.name}
+        onChange={(e) => renameSection(id, e.target.value)}
+        aria-label="Section name"
+        title="Click to rename"
+      />
+      <span className="text-[10px] text-cream-500 shrink-0" title={`${sectionBars(p, id)}-bar loop, used ${uses}× in the song`}>
+        {sectionBars(p, id)} bar{sectionBars(p, id) > 1 ? 's' : ''} · {uses}×
+      </span>
+      {editing && <span className="text-[9px] font-bold text-ink-950 bg-cream-100 rounded px-1">EDITING</span>}
       {confirm ? (
-        <div className="flex items-center gap-1 pl-1.5" role="alertdialog" aria-label={`Delete ${s.name}?`}>
-          <span className="text-xs flex-1">Delete it{uses ? ` and its ${uses} block${uses > 1 ? 's' : ''}` : ''}?</span>
-          <button className="btn text-xs px-2 py-1" onClick={() => setConfirm(false)} autoFocus>
+        <div className="flex items-center gap-1" role="alertdialog" aria-label={`Delete ${s.name}?`}>
+          <span className="text-xs">Delete{uses ? ` + ${uses} block${uses > 1 ? 's' : ''}` : ''}?</span>
+          <button className="btn text-xs px-2 py-0.5" onClick={() => setConfirm(false)} autoFocus>
             Keep
           </button>
           <button
-            className="btn text-xs px-2 py-1 bg-kick text-ink-950 hover:bg-kick"
+            className="btn text-xs px-2 py-0.5 bg-kick text-ink-950 hover:bg-kick"
             onClick={() => withUndo(`Deleted "${s.name}"`, () => deleteSection(id))}
           >
             Delete
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1 pl-1">
-          <button
-            className="btn text-xs px-2 py-1"
-            onClick={() => {
-              switchSection(id);
-              set({ view: 'section', track: 'beat', viewBar: 0 });
-            }}
-            title="Edit this section's beat, chords and melody"
-          >
-            ✏️ Edit
-          </button>
-          <button className="btn text-xs px-2 py-1" onClick={() => addBlock(id)} title="Add this section to the end of the song">
+        <div className="flex gap-0.5">
+          <button className="btn text-xs px-1.5 py-0.5" onClick={() => addBlock(id)} title="Add this section to the end of the song" aria-label={`Add ${s.name} to song`}>
             ＋ Add to song
           </button>
-          <button className="btn text-xs px-2 py-1" onClick={() => duplicateSection(id)} title="Make a copy to create a variation" aria-label={`Duplicate ${s.name}`}>
+          <button className="btn text-xs px-1.5 py-0.5" onClick={() => duplicateSection(id)} title="Make a copy to create a variation" aria-label={`Duplicate ${s.name}`}>
             ⧉
           </button>
           <button
-            className="btn text-xs px-2 py-1"
+            className="btn text-xs px-1.5 py-0.5"
             onClick={() => setConfirm(true)}
             disabled={p.sections.length <= 1}
             title={p.sections.length <= 1 ? 'A song needs at least one section' : 'Delete this section'}
@@ -185,7 +209,7 @@ function SectionCard({ id }: { id: string }) {
 
 function Arrangement() {
   const p = useProject((s) => s.project);
-  const { removeBlock, moveBlock, moveBlockTo, addBlock, setRepeats, toggleBlockMute, toggleFill } = useProject();
+  const { removeBlock, duplicateBlock, moveBlockTo, addBlock, toggleBlockMute, toggleFill } = useProject();
   const { songStep, playMode, playing } = useUi();
   const timeline = buildTimeline(p);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -203,10 +227,11 @@ function Arrangement() {
   }, []);
 
   /** The drop position under the pointer: before the first block whose middle is right of it. */
-  const indexAt = (x: number) => {
+  const indexAt = (x: number, y: number) => {
     for (const el of rowRef.current?.querySelectorAll<HTMLElement>('[data-block]') ?? []) {
       const r = el.getBoundingClientRect();
-      if (x < r.left + r.width / 2) return Number(el.dataset.block);
+      // blocks wrap into rows: above this row, or on it and left of this block's middle
+      if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) return Number(el.dataset.block);
     }
     return p.song.length;
   };
@@ -217,7 +242,7 @@ function Arrangement() {
     if (!dragged) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = dragged.kind === 'section' ? 'copy' : 'move';
-    const at = indexAt(e.clientX);
+    const at = indexAt(e.clientX, e.clientY);
     if (at !== dropAt) setDropAt(at);
   };
   const onDragLeave = (e: React.DragEvent) => {
@@ -226,7 +251,7 @@ function Arrangement() {
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const d = dragged;
-    const at = indexAt(e.clientX);
+    const at = indexAt(e.clientX, e.clientY);
     dragged = null;
     setDropAt(null);
     setDragFrom(null);
@@ -245,13 +270,13 @@ function Arrangement() {
           (dropAt !== null ? 'border-cream-100 bg-ink-700/50' : 'border-ink-600')
         }
       >
-        Your song is empty. Drag a section here, or use <b className="text-cream-300">＋ Add to song</b> on a section above.
+        Your song is empty. Drag a section here, or use <b className="text-cream-300">＋ Add to song</b> on a section.
       </div>
     );
 
   return (
-    <div className="overflow-x-auto -mx-1 px-1 pb-1" {...dropHandlers}>
-      <div ref={rowRef} className="flex gap-1.5 items-stretch">
+    <div className="pb-1" {...dropHandlers}>
+      <div ref={rowRef} className="flex flex-wrap gap-2 items-stretch">
         {timeline.map((seg, i) => {
           const b = seg.block;
           const section = p.sections.find((s) => s.id === b.section)!;
@@ -271,11 +296,11 @@ function Arrangement() {
                 e.dataTransfer.setData('text/plain', section.name);
               }}
               className={
-                'relative rounded-xl bg-ink-900/70 border-2 p-1.5 flex flex-col gap-1 shrink-0 cursor-grab active:cursor-grabbing transition-opacity ' +
+                'relative rounded-xl bg-ink-900/70 border-2 p-2 flex flex-col gap-1.5 shrink-0 cursor-grab active:cursor-grabbing transition-opacity ' +
                 (live ? 'border-cream-100' : 'border-ink-600') +
                 (dragFrom === seg.index ? ' opacity-40' : '')
               }
-              style={{ width: Math.max(150, Math.min(260, seg.steps * 1.6)) }}
+              style={{ width: Math.max(190, Math.min(300, seg.steps * 2)) }}
               aria-label={`Block ${i + 1}: ${section.name} ×${b.repeats}`}
               title="Drag to move this block"
             >
@@ -285,46 +310,22 @@ function Arrangement() {
               <div className="flex items-center gap-1">
                 <span className="font-extrabold text-sm truncate flex-1">{section.name}</span>
                 <span className="text-[10px] text-cream-500">{(seg.steps / 16) | 0} bars</span>
-              </div>
-
-              {/* repeats + order */}
-              <div className="flex items-center gap-1">
-                <div className="flex items-center gap-0.5" title="How many times this section plays here">
-                  <button className="btn px-2 py-0 text-xs" onClick={() => setRepeats(i, b.repeats - 1)} disabled={b.repeats <= 1} aria-label="Fewer repeats">
-                    −
-                  </button>
-                  <span className="text-xs font-bold w-7 text-center">×{b.repeats}</span>
-                  <button
-                    className="btn px-2 py-0 text-xs"
-                    onClick={() => setRepeats(i, b.repeats + 1)}
-                    disabled={b.repeats >= MAX_REPEATS}
-                    aria-label="More repeats"
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="ml-auto flex gap-0.5">
-                  <button className="btn px-1.5 py-0 text-xs" onClick={() => moveBlock(i, -1)} disabled={i === 0} aria-label="Move earlier" title="Move earlier">
-                    ◀
-                  </button>
-                  <button
-                    className="btn px-1.5 py-0 text-xs"
-                    onClick={() => moveBlock(i, 1)}
-                    disabled={i === timeline.length - 1}
-                    aria-label="Move later"
-                    title="Move later"
-                  >
-                    ▶
-                  </button>
-                  <button
-                    className="btn px-1.5 py-0 text-xs"
-                    onClick={() => withUndo(`Removed "${section.name}" from the song`, () => removeBlock(i))}
-                    aria-label="Remove from song"
-                    title="Remove this block from the song (the section itself stays)"
-                  >
-                    ✕
-                  </button>
-                </div>
+                <button
+                  className="btn px-1.5 py-0 text-xs"
+                  onClick={() => duplicateBlock(i)}
+                  aria-label="Copy block"
+                  title="Copy this block and put the copy right after it"
+                >
+                  ⧉
+                </button>
+                <button
+                  className="btn px-1.5 py-0 text-xs"
+                  onClick={() => withUndo(`Removed "${section.name}" from the song`, () => removeBlock(i))}
+                  aria-label="Remove from song"
+                  title="Remove this block from the song (the section itself stays)"
+                >
+                  ✕
+                </button>
               </div>
 
               {/* parts on/off */}
@@ -335,7 +336,7 @@ function Arrangement() {
                     <button
                       key={part}
                       className={
-                        'flex-1 rounded-md text-sm py-0.5 border ' +
+                        'flex-1 rounded-md text-sm py-1 border ' +
                         (off ? 'border-ink-600 opacity-35 line-through' : 'border-transparent bg-ink-700 hover:bg-ink-600')
                       }
                       onClick={() => toggleBlockMute(i, part)}
