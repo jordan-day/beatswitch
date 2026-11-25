@@ -1,0 +1,93 @@
+<!--
+  Source of public/preview.png, the image shown when a BeatSwitch link is shared (1200x630).
+  To regenerate it after a change (Chrome):
+    chrome --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1200,630 --virtual-time-budget=4000 --screenshot=public/preview.png scripts/og-image.html
+-->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=block" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: radial-gradient(1200px 630px at 20% 0%, #2a2430 0%, #1a171e 55%, #121015 100%);
+    font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+    color: #f3e9dc;
+    display: flex;
+    align-items: center;
+    gap: 56px;
+    padding: 0 72px;
+  }
+  .left { flex: 1; min-width: 0; }
+  .logo { display: flex; align-items: center; gap: 18px; font-size: 84px; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+  .logo .tape { font-size: 76px; }
+  .logo b { color: #e8916b; font-weight: 900; }
+  .tag { margin-top: 26px; font-size: 40px; font-weight: 800; line-height: 1.2; }
+  .sub { margin-top: 18px; font-size: 26px; font-weight: 600; color: #a8998a; line-height: 1.35; }
+  .chips { margin-top: 30px; display: flex; gap: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 20px; font-weight: 800; padding: 8px 16px; border-radius: 999px; background: #2f2a36; border: 2px solid #3d3746; color: #d9cbb8; }
+
+  .app { width: 470px; flex-shrink: 0; background: #24202a; border: 2px solid #3d3746; border-radius: 28px; padding: 22px; box-shadow: 0 30px 60px rgba(0,0,0,.45); transform: rotate(-2deg); }
+  .bar { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .play { width: 60px; height: 60px; border-radius: 50%; background: #e8916b; display: grid; place-items: center; }
+  .play i { width: 0; height: 0; border-left: 20px solid #121015; border-top: 13px solid transparent; border-bottom: 13px solid transparent; margin-left: 6px; }
+  .title { font-size: 24px; font-weight: 900; }
+  .meta { font-size: 16px; color: #a8998a; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; margin-bottom: 7px; }
+  .grid span { height: 22px; border-radius: 5px; background: #2f2a36; }
+  .grid span.q { background: #3d3746; }
+  .chords { display: flex; gap: 6px; margin: 14px 0 12px; }
+  .chords span { flex: 1; text-align: center; font-weight: 900; font-size: 18px; padding: 8px 0; border-radius: 10px; background: rgba(143,179,229,.25); }
+  .chords span.on { background: #8fb3e5; color: #121015; }
+  .mel { position: relative; height: 62px; border-radius: 10px; background: #1a171e; }
+  .mel span { position: absolute; height: 10px; border-radius: 4px; background: #f2a65a; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="logo"><span class="tape">📼</span><span>Beat<b>Switch</b></span></div>
+    <div class="tag">Make lo-fi beats in your browser</div>
+    <div class="sub">Drums, chords and melody that fit together, then a whole song. Free, nothing to install.</div>
+    <div class="chips"><span class="chip">🥁 Beat</span><span class="chip">🎹 Chords</span><span class="chip">🎵 Melody</span><span class="chip">🎼 Song</span></div>
+  </div>
+
+  <div class="app">
+    <div class="bar">
+      <div class="play"><i></i></div>
+      <div><div class="title">Rainy Window</div><div class="meta">72 BPM · chill</div></div>
+    </div>
+    <div class="grid" id="kick"></div>
+    <div class="grid" id="snare"></div>
+    <div class="grid" id="hat"></div>
+    <div class="grid" id="bass"></div>
+    <div class="chords"><span>Am7</span><span class="on">Dm7</span><span>G7</span><span>Cmaj7</span></div>
+    <div class="mel" id="mel"></div>
+  </div>
+
+<script>
+  const rows = {
+    kick: ['#e8916b', [0, 7, 10]],
+    snare: ['#e6c27a', [4, 12]],
+    hat: ['#9ccf9a', [0, 2, 4, 6, 8, 10, 11, 12, 14]],
+    bass: ['#e58fae', [0, 10]],
+  };
+  for (const [id, [color, on]] of Object.entries(rows)) {
+    const el = document.getElementById(id);
+    for (let i = 0; i < 16; i++) {
+      const s = document.createElement('span');
+      if (on.includes(i)) s.style.background = color;
+      else if (i % 4 === 0) s.className = 'q';
+      el.appendChild(s);
+    }
+  }
+  const mel = document.getElementById('mel');
+  [[2, 10, 40], [14, 7, 26], [24, 10, 14], [36, 14, 30], [53, 9, 20], [65, 12, 34], [80, 14, 22]].forEach(([l, w, b]) => {
+    const s = document.createElement('span');
+    s.style.left = l + '%'; s.style.width = w + '%'; s.style.bottom = b + '%';
+    mel.appendChild(s);
+  });
+</script>
+</body>
+</html>
