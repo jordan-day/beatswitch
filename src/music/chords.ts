@@ -282,6 +282,12 @@ export function degreeNote(tonic: string, mood: Mood, octave: number, d: number)
   return Note.transpose(n, Interval.fromSemitones(12 * Math.floor(d / 7)));
 }
 
+/** The sounding note of a melody note: its scale degree, nudged by an optional accidental (+1 sharp / -1 flat). */
+export function melodyPitch(tonic: string, mood: Mood, octave: number, d: number, x: 0 | 1 | -1 = 0): string {
+  const n = degreeNote(tonic, mood, octave, d);
+  return x ? Note.fromMidi(Note.midi(n)! + x) : n;
+}
+
 /** Shift every note/symbol by the interval between two keys (keeps hand-made chords when changing key). */
 export function transposeSlot(slot: ChordSlot, from: string, to: string): ChordSlot {
   let iv = Interval.distance(from, to);

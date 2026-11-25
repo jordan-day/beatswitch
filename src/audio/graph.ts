@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
-import { bassNote, degreeNote, slotNotes } from '../music/chords';
+import { bassNote, degreeNote, melodyPitch, slotNotes } from '../music/chords';
 import { chordHits, slotLength } from '../music/patterns';
+import { brightToCutoff, fadeToRelease, resolveTone, softToAttack, vibratoToDepth } from '../music/tone';
 import {
   MELODY_ROWS,
   SAMPLED_INSTRUMENTS,
@@ -100,7 +101,7 @@ export class Graph {
   private keys: { voice: KeysVoice; key: string } | null = null;
   private keysVol = new Tone.Volume(0);
   /** Melody voices by melody id, each with its own volume. */
-  private melodies = new Map<string, { voice: KeysVoice; key: string; vol: Tone.Volume }>();
+  private melodies = new Map<string, { voice: KeysVoice; key: string; vol: Tone.Volume; vib: Tone.Vibrato; lp: Tone.Filter }>();
   private bass: Tone.MonoSynth | null = null;
   private bassKey = '';
   private bassVol = new Tone.Volume(0);
@@ -181,6 +182,8 @@ export class Graph {
     for (const [id, m] of this.melodies) {
       if (melodies.some((x) => x.id === id)) continue;
       m.voice.dispose();
+      m.vib.dispose();
+      m.lp.dispose();
       m.vol.dispose();
       this.melodies.delete(id);
     }
@@ -189,11 +192,18 @@ export class Graph {
       if (!m || m.key !== voiceKey(track.sound)) {
         m?.voice.dispose();
         const vol = m?.vol ?? new Tone.Volume(0).connect(this.wobble);
+        const lp = m?.lp ?? new Tone.Filter({ type: 'lowpass', frequency: 18000, Q: 0.4 }).connect(vol);
+        const vib = m?.vib ?? new Tone.Vibrato({ frequency: 5, depth: 0, wet: 1 }).connect(lp);
         const made = makeVoice(track.sound);
-        made.voice.output.connect(vol);
-        m = { ...made, vol };
+        made.voice.output.connect(vib);
+        m = { ...made, vol, vib, lp };
         this.melodies.set(id, m);
       }
+      // the instrument's shaping: how a note starts and ends, vibrato, and brightness
+      const tone = resolveTone(track.sound, track.tone);
+      m.voice.setFeel(softToAttack(tone.soft), fadeToRelease(tone.fade));
+      m.vib.depth.value = vibratoToDepth(tone.vibrato);
+      m.lp.frequency.rampTo(brightToCutoff(tone.bright), 0.05);
       // +5 dB: a single melody line needs to sit on top of the (multi-note) chords
       m.vol.volume.value = track.mute ? -Infinity : toDb(track.volume) + 5;
     }
@@ -295,7 +305,7 @@ export class Graph {
         if (!voice) continue;
         for (const m of track.notes) {
           if (m.s !== step || m.d >= MELODY_ROWS) continue;
-          const note = degreeNote(p.tonic, p.mood, track.octave, m.d);
+          const note = melodyPitch(p.tonic, p.mood, track.octave, m.d, m.x ?? 0);
           const l = Math.min(m.l, total - m.s);
           voice.play([note], l * sd * 0.92, time, 0.75 + Math.random() * 0.1);
         }
@@ -411,6 +421,8 @@ export class Graph {
     this.keys?.voice.dispose();
     for (const m of this.melodies.values()) {
       m.voice.dispose();
+      m.vib.dispose();
+      m.lp.dispose();
       m.vol.dispose();
     }
     this.bass?.dispose();

@@ -65,7 +65,7 @@ export function SongEditor() {
             <h2 className="text-base font-extrabold">
               Song <span className="ml-1 text-sm font-bold text-cream-500" title="Total length of the song">{formatTime(seconds)} · {songBars(p)} bars</span>
             </h2>
-            <p className="text-xs text-cream-500">Plays left to right. Press ▶ at the top to hear it all. Drag blocks to reorder.</p>
+            <p className="text-xs text-cream-500">Plays left to right. Set Loop to Song at the top and press ▶ to hear it all. Drag blocks to reorder.</p>
           </div>
           <Toggle on={p.fadeIn} onClick={() => setFade('fadeIn', !p.fadeIn)} title="Fade in over the first 2 bars">
             Fade in

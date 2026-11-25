@@ -1,4 +1,4 @@
-import { defaultSong, newId, noMutes, type Part, type SongBlock } from '../state/song';
+import { applyPatterns, defaultSong, extractPatterns, newId, noMutes, type Part, type Section, type SongBlock } from '../state/song';
 import type { BassStep, MelodyNote, Mood, Project, SynthKit } from '../state/types';
 import { MAX_STEPS } from '../state/types';
 import { PROGRESSIONS, progressionChords } from './chords';
@@ -89,7 +89,12 @@ const PRESETS: PresetDef[] = [
   },
 ];
 
-export const PRESET_LIST = PRESETS.map((p, i) => ({ index: i, name: p.name, blurb: p.blurb }));
+/** Starter beats that are whole songs with several sections, built in code. */
+const SONGS: { name: string; blurb: string; build: () => Project }[] = [
+  { name: 'Ocarina Dreams', blurb: 'Wistful ocarina, soft pad, slow and dusty (a full song)', build: ocarinaDreams },
+];
+
+export const PRESET_LIST = [...PRESETS, ...SONGS].map((p, i) => ({ index: i, name: p.name, blurb: p.blurb }));
 
 export function parseBass(s: string): BassStep[] {
   return Array.from({ length: MAX_STEPS }, (_, i) => {
@@ -99,6 +104,7 @@ export function parseBass(s: string): BassStep[] {
 }
 
 export function buildPreset(index: number): Project {
+  if (index >= PRESETS.length && SONGS[index - PRESETS.length]) return SONGS[index - PRESETS.length].build();
   const p = PRESETS[index] ?? PRESETS[0];
   const synth = { kind: 'synth' as const, id: p.kit ?? ('dusty' as const) };
   const melody: MelodyNote[] = (p.melody ?? []).map(([s, l, d]) => ({ s, l, d }));
@@ -176,3 +182,104 @@ export function emptyProject(withChords = true): Project {
   Object.assign(p, defaultSong());
   return p;
 }
+
+/**
+ * "Ocarina Dreams": an original lo-fi piece in the spirit of a fairy-tale adventure intro. A recorded
+ * ocarina sings a slow, wistful line over a soft pad in D minor, with dusty drums that come in
+ * after a chords-and-ocarina intro. Three sections (Intro, Verse, Bridge) arranged into a full song.
+ */
+function ocarinaDreams(): Project {
+  const base = emptyProject(true);
+  base.name = 'Ocarina Dreams';
+  base.bpm = 66;
+  base.swing = 25;
+  base.tonic = 'D';
+  base.mood = 'sad';
+  // lots of room and only a little tape wobble, so the ocarina floats like it is played in a big hall
+  base.fx = { lofi: 0.55, ...lofiMacro(0.55), space: 0.7, wobble: 0.15 };
+  base.chords.sound = 'pad';
+  base.chords.volume = 0.7;
+  base.melody.sound = 'ocarina';
+  base.melody.octave = 4;
+  base.melody.volume = 0.8;
+  const kit = { kind: 'synth' as const, id: 'soft' as const };
+  for (const row of Object.values(base.drums)) row.sound = kit;
+  base.drums.kick.volume = 0.8;
+  base.drums.snare.volume = 0.55;
+  base.drums.hat.volume = 0.4;
+
+  interface Def {
+    name: string;
+    chords: string[];
+    rhythm: 'whole' | 'half';
+    drums: { kick: string; snare: string; hat: string; openhat: string; perc: string };
+    bass: string;
+    /** [start step, length, scale degree]: degree 0 is the key note (D), 7 is D an octave up */
+    melody: [number, number, number][];
+  }
+  const NONE = '................';
+  const defs: Def[] = [
+    {
+      // chords and a few long ocarina notes
+      name: 'Intro',
+      chords: ['Dm9', 'Bbmaj7', 'Gm7', 'A7sus4'],
+      rhythm: 'whole',
+      drums: { kick: NONE, snare: NONE, hat: NONE, openhat: NONE, perc: NONE },
+      bass: 'x...............',
+      melody: [[8, 10, 4], [32, 8, 7], [48, 12, 5]],
+    },
+    {
+      name: 'Verse',
+      chords: ['Dm9', 'Bbmaj7', 'Gm7', 'A7sus4'],
+      rhythm: 'whole',
+      drums: { kick: 'X.....x...x.....', snare: '....X.......X...', hat: 'x.x.x.x.x.x.x.x.', openhat: NONE, perc: NONE },
+      bass: 'x.......x...5...',
+      melody: [
+        [0, 5, 4], [6, 2, 6], [8, 4, 7], [12, 3, 6],
+        [16, 6, 7], [24, 2, 6], [26, 2, 5], [28, 4, 4],
+        [32, 4, 5], [38, 2, 7], [40, 4, 9], [44, 4, 7],
+        [48, 6, 8], [54, 2, 7], [56, 8, 4],
+      ],
+    },
+    {
+      // lifts higher, with a fuller beat
+      name: 'Bridge',
+      chords: ['Bbmaj7', 'F', 'Gm7', 'A7'],
+      rhythm: 'half',
+      drums: { kick: 'X.....x...x...x.', snare: '....X.......X...', hat: 'x.xxx.x.x.xxx.x.', openhat: '..............x.', perc: '..x.......x.....' },
+      bass: 'x.....x.x.....5.',
+      melody: [
+        [0, 6, 9], [8, 4, 7], [12, 4, 9],
+        [16, 4, 10], [20, 4, 9], [24, 4, 11], [28, 4, 9],
+        [32, 6, 10], [40, 2, 9], [42, 2, 7], [44, 4, 5],
+        [48, 4, 4], [52, 4, 6], [56, 8, 8],
+      ],
+    },
+  ];
+
+  /** One section's patterns, as a whole-project snapshot. */
+  const layer = (d: Def) => {
+    const p = structuredClone(base);
+    p.chords.slots = d.chords.map((symbol) => ({ symbol }));
+    p.chords.rhythm = d.rhythm;
+    p.chords.steps = rhythmToSteps(d.rhythm, 4, 4);
+    for (const r of Object.keys(d.drums) as (keyof Def['drums'])[]) p.drums[r].steps = parsePattern(d.drums[r]);
+    p.bass.steps = parseBass(d.bass);
+    p.melody.notes = d.melody.map(([s, l, deg]) => ({ s, l, d: deg }));
+    return extractPatterns(p);
+  };
+
+  const [intro, verse, bridge] = defs.map((d): Section => ({ id: newId(), name: d.name, patterns: layer(d) }));
+  const block = (section: Section, repeats: number, fill = false): SongBlock => ({ id: newId(), section: section.id, repeats, mute: noMutes(), fill });
+
+  // the intro is the section open for editing, so its patterns live at the top level
+  applyPatterns(base, intro.patterns!);
+  delete intro.patterns;
+  base.sections = [intro, verse, bridge];
+  base.activeSection = intro.id;
+  base.song = [block(intro, 1), block(verse, 2), block(bridge, 1, true), block(verse, 2), block(bridge, 1, true), block(verse, 1, true), block(intro, 1)];
+  base.fadeIn = true;
+  base.fadeOut = true;
+  return base;
+}
+

@@ -17,6 +17,7 @@ import {
   type ExtraDrum,
   type ExtraMelody,
   type MelodyNote,
+  type MelodyTone,
   type MelodyTrack,
   type Project,
   type SoundRef,
@@ -66,11 +67,25 @@ function melodyNotes(v: unknown): MelodyNote[] {
   return notes
     .filter(isObj)
     .filter((n) => isInt(n.s, 0, MAX_STEPS - 1) && isInt(n.d, 0, MELODY_ROWS - 1))
-    .map((n) => ({ s: n.s as number, d: n.d as number, l: Math.round(num(n.l, 1, MAX_STEPS, 1)) }));
+    .map((n) => ({
+      s: n.s as number,
+      d: n.d as number,
+      l: Math.round(num(n.l, 1, MAX_STEPS, 1)),
+      ...(n.x === 1 || n.x === -1 ? { x: n.x as 1 | -1 } : {}),
+    }));
+}
+
+/** Instrument shaping: all four sliders, each clamped to 0..1, or nothing. */
+function melodyTone(v: unknown): MelodyTone | undefined {
+  if (!isObj(v)) return undefined;
+  const t = { soft: num(v.soft, 0, 1, -1), fade: num(v.fade, 0, 1, -1), vibrato: num(v.vibrato, 0, 1, -1), bright: num(v.bright, 0, 1, -1) };
+  return Object.values(t).some((x) => x < 0) ? undefined : t;
 }
 
 function melodyTrack(m: Record<string, unknown>, base: MelodyTrack): MelodyTrack {
+  const tone = melodyTone(m.tone);
   return {
+    ...(tone ? { tone } : {}),
     sound: oneOf(m.sound, MELODY_SOUNDS, base.sound),
     octave: Math.round(num(m.octave, 3, 5, 4)),
     notes: melodyNotes(m.notes),

@@ -99,7 +99,7 @@ export async function play() {
   const songMode = useUi.getState().playMode === 'song';
   const startP = useProject.getState().project;
   if (songMode && songSteps(startP) === 0) {
-    useUi.getState().notify('The song is empty. Open 🎼 Song and use "Add to song" on a section.');
+    useUi.getState().notify('The song is empty. Open the Song tab and use "Add to song" on a section.');
     return;
   }
   counter = 0;
@@ -132,8 +132,17 @@ export async function play() {
       }
       return;
     }
-    // the editors show the playhead only while the section being edited is the one playing
-    Tone.getDraw().schedule(() => showPlayhead(at.seg.block.section === p.activeSection ? at.local : -1, p, { songStep }), time);
+    // In the section editor the view follows the song: when playback moves into another section, that
+    // section opens (and the editor starts following its bars and chords from the top).
+    Tone.getDraw().schedule(() => {
+      const id = at.seg.block.section;
+      if (useUi.getState().view === 'editor' && id !== useProject.getState().project.activeSection) {
+        useProject.getState().followSection(id);
+        followBar = followSlot = -1;
+      }
+      const now = useProject.getState().project;
+      showPlayhead(id === now.activeSection ? at.local : -1, now, { songStep });
+    }, time);
   }, '16n');
   t.position = 0;
   t.start(startAt);
@@ -158,11 +167,23 @@ export async function setPlayMode(mode: 'section' | 'song') {
   if (wasPlaying) await play();
 }
 
-/** Switch view. The play button follows it: loop the section in the editor, play the whole song in the song view. */
+/** What the play button plays: one bar on repeat, the section on repeat, or the whole song once. */
+export type LoopMode = 'bar' | 'section' | 'song';
+
+export const loopModeOf = (s: { playMode: 'section' | 'song'; loopBar: boolean }): LoopMode =>
+  s.playMode === 'song' ? 'song' : s.loopBar ? 'bar' : 'section';
+
+/** Change what the play button plays (restarts playback when switching to or from the whole song). */
+export async function setLoopMode(mode: LoopMode) {
+  const ui = useUi.getState();
+  if (mode === 'song') return setPlayMode('song');
+  if (ui.playMode === 'song') await setPlayMode('section');
+  useUi.getState().set({ loopBar: mode === 'bar' });
+}
+
+/** Switch between the section editor and the song arrangement. */
 export function showView(view: 'editor' | 'song') {
-  if (useUi.getState().view === view) return;
   useUi.getState().set({ view });
-  void setPlayMode(view === 'song' ? 'song' : 'section');
 }
 
 export async function togglePlay() {

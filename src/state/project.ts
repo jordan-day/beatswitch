@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { PROGRESSIONS, progressionChords, transposeSlot } from '../music/chords';
 import { generateMelody } from '../music/melody';
+import { resolveTone } from '../music/tone';
 import { buildPreset } from '../music/presets';
 import { extendMelody, extendSteps, lofiMacro, randomDrums, rhythmToSteps } from '../music/patterns';
 import { saveProject } from '../storage/local';
@@ -19,6 +20,7 @@ import {
   type DrumRow,
   type FxSettings,
   type MelodyNote,
+  type MelodyTone,
   type Mood,
   type Project,
   type Step,
@@ -60,8 +62,12 @@ interface ProjectStore {
   /** Move several notes together by `ds` steps and `dd` pitch rows. All or nothing: refused if any would leave the grid or land on another note. */
   moveNotes: (keys: { s: number; d: number }[], ds: number, dd: number, melody?: string) => void;
   removeNotes: (keys: { s: number; d: number }[], melody?: string) => void;
+  /** Make every bar of a melody a copy of bar `bar` (notes are cut at the bar's edges). */
+  copyMelodyBarToAll: (bar: number, melody?: string) => void;
   /** Add notes (e.g. pasted ones), replacing any they overlap on the same row. */
   pasteNotes: (notes: MelodyNote[], melody?: string) => void;
+  /** Shape a melody's instrument (soft start, fade out, vibrato, brightness). `null` goes back to the instrument's own sound. */
+  setMelodyTone: (tone: Partial<MelodyTone> | null, melody?: string) => void;
   /** Cut a note in two at step `at` (it must fall inside the note, after its first step). */
   splitNote: (s: number, d: number, at: number, melody?: string) => void;
   clearMelody: (melody: string) => void;
@@ -80,6 +86,8 @@ interface ProjectStore {
 
   // song: sections + arrangement
   switchSection: (id: string) => void;
+  /** Show another section while the song plays: like switchSection, but it is not an edit (no undo step, nothing to save). */
+  followSection: (id: string) => void;
   addSection: () => void;
   duplicateSection: (id: string) => void;
   renameSection: (id: string, name: string) => void;
@@ -323,6 +331,7 @@ export const useProject = create<ProjectStore>((set, get) => ({
       const d2 = Math.max(0, Math.min(nd, MELODY_ROWS - 1));
       if (m.notes.some((x) => x !== note && x.d === d2 && x.s < s2 + note.l && x.s + x.l > s2)) return;
       note.s = s2;
+      if (d2 !== note.d) delete note.x;
       note.d = d2;
     }, `melody-move:${melody}`),
 
@@ -348,8 +357,21 @@ export const useProject = create<ProjectStore>((set, get) => ({
       for (const n of moving) {
         n.s += ds;
         n.d += dd;
+        if (dd) delete n.x; // an accidental belongs to its scale degree
       }
     }, `melody-move:${melody}`),
+
+  copyMelodyBarToAll: (bar, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (!m) return;
+      const from = bar * 16;
+      const to = from + 16;
+      const src = m.notes
+        .filter((n) => n.s < to && n.s + n.l > from)
+        .map((n) => ({ s: Math.max(n.s, from) - from, l: Math.min(n.s + n.l, to) - Math.max(n.s, from), d: n.d, ...(n.x ? { x: n.x } : {}) }));
+      m.notes = Array.from({ length: p.bars }, (_, b) => src.map((n) => ({ ...n, s: n.s + b * 16 }))).flat();
+    }),
 
   removeNotes: (keys, melody = MAIN_MELODY) =>
     get().update((p) => {
@@ -365,12 +387,20 @@ export const useProject = create<ProjectStore>((set, get) => ({
       m.notes.push(...notes.map((n) => ({ ...n })));
     }),
 
+  setMelodyTone: (tone, melody = MAIN_MELODY) =>
+    get().update((p) => {
+      const m = melodyTrack(p, melody);
+      if (!m) return;
+      if (tone === null) delete m.tone;
+      else m.tone = { ...resolveTone(m.sound, m.tone), ...tone };
+    }, `melody-tone:${melody}`),
+
   splitNote: (s, d, at, melody = MAIN_MELODY) =>
     get().update((p) => {
       const m = melodyTrack(p, melody);
       const note = m?.notes.find((x) => x.s === s && x.d === d);
       if (!m || !note || at <= note.s || at >= note.s + note.l) return;
-      m.notes.push({ s: at, l: note.s + note.l - at, d });
+      m.notes.push({ s: at, l: note.s + note.l - at, d, ...(note.x ? { x: note.x } : {}) });
       note.l = at - note.s;
     }),
 
@@ -429,6 +459,16 @@ export const useProject = create<ProjectStore>((set, get) => ({
   setFx: (key, v) => get().update((p) => void (p.fx[key] = v), 'fx:' + key),
 
   switchSection: (id) => get().update((p) => switchTo(p, id)),
+
+  followSection: (id) => {
+    const { project, beatId } = get();
+    if (project.activeSection === id) return;
+    const next = structuredClone(project);
+    switchTo(next, id);
+    if (next.activeSection !== id) return;
+    ids.set(next, beatId);
+    set({ project: next });
+  },
 
   // a new section starts as a copy of the one you're on, is added to the end of the song, and opens
   addSection: () =>
@@ -556,7 +596,25 @@ export const useUi = create<UiStore>((set) => ({
   track: 'beat',
   helpOpen: false,
   toast: null,
-  set: (s) => set(s),
+  // The bar you're looking at and the chord you're editing always agree: picking a bar selects its
+  // first chord, and picking a chord moves to its bar (so the editors never show different bars).
+  set: (patch) =>
+    set(() => {
+      const next = { ...patch };
+      const p = useProject.getState().project;
+      const count = p.chords.slots.length;
+      const per = Math.max(1, count / p.bars);
+      if ('viewBar' in patch && !('selectedSlot' in patch)) {
+        const bar = Math.max(0, Math.min(patch.viewBar ?? 0, p.bars - 1));
+        next.viewBar = bar;
+        if (Math.floor(useUi.getState().selectedSlot / per) !== bar) next.selectedSlot = Math.min(count - 1, bar * per);
+      } else if ('selectedSlot' in patch && !('viewBar' in patch)) {
+        const slot = Math.max(0, Math.min(patch.selectedSlot ?? 0, count - 1));
+        next.selectedSlot = slot;
+        next.viewBar = Math.floor(slot / per);
+      }
+      return next;
+    }),
   notify: (text, action) => set({ toast: { id: Date.now(), text, action } }),
 }));
 
@@ -580,3 +638,12 @@ export function withUndo(message: string, edit: () => void) {
     },
   });
 }
+
+// Keep the bar/chord selection valid when the beat itself changes shape: a different loop length or
+// chord count re-maps chords to bars, and switching section starts back at its first bar.
+useProject.subscribe((s, prev) => {
+  const a = s.project;
+  const b = prev.project;
+  if (a.activeSection !== b.activeSection) useUi.getState().set({ viewBar: 0 });
+  else if (a.bars !== b.bars || a.chords.slots.length !== b.chords.slots.length) useUi.getState().set({ viewBar: useUi.getState().viewBar });
+});

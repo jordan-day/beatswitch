@@ -59,6 +59,8 @@ export interface MelodyNote {
   s: number; // start step 0..63
   l: number; // length in steps
   d: number; // scale degree 0..14
+  /** Semitones above (+1) or below (-1) the scale note, for the odd note outside the key (e.g. a natural in a flat key). */
+  x?: -1 | 1;
 }
 export const MELODY_ROWS = 15;
 
@@ -76,12 +78,21 @@ export interface ExtraDrum extends DrumTrack {
   voice: DrumRow;
 }
 
+/** How a melody's instrument is shaped; each 0..1. Left out, the instrument sounds as it naturally does. */
+export interface MelodyTone {
+  soft: number; // how gently a note starts (0 = instant, 1 = a slow swell)
+  fade: number; // how long a note rings after it ends
+  vibrato: number; // gentle wobble in held notes
+  bright: number; // dark and warm (0) to open and bright (1)
+}
+
 export interface MelodyTrack {
   sound: MelodySound;
   octave: number; // 3..5, octave of the bottom row
   notes: MelodyNote[];
   volume: number;
   mute: boolean;
+  tone?: MelodyTone;
 }
 
 /** A melody you added, on top of the first one, with its own instrument. */

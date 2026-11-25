@@ -40,7 +40,7 @@ function HelpOverlay() {
   const steps = [
     ['▶', 'Press play', 'A beat is already loaded. Just listen first (or press Space).'],
     ['🥁', 'Make a loop', 'Click squares for drums & bass, pick chords, or draw a melody. Changes play instantly.'],
-    ['🎼', 'Build a song', 'Open the Song tab to add sections (Intro, Verse, Chorus…) and line them up. Press ▶ there to hear the whole song.'],
+    ['🎼', 'Build a song', 'Open the Song tab to add sections (Intro, Verse, Chorus…) and line them up. Set Loop to Song at the top and press ▶ to hear it all.'],
     ['📼', 'Set the vibe', 'Open ⚙ at the top to pick a mood and key and turn up the Lo-fi knob. Each editor tab has its own sound choices.'],
   ];
   return (

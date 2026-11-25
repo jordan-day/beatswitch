@@ -1,3 +1,4 @@
+import { FEEL } from '../music/tone';
 import * as Tone from 'tone';
 import type { BassSound, DrumRow, KeysSound, MelodySound, SampledInstrument, SynthKit } from '../state/types';
 
@@ -119,6 +120,8 @@ export function makeSampleDrum(buffer: AudioBuffer, gain = 1): DrumVoice {
 
 export interface KeysVoice {
   output: Tone.ToneAudioNode;
+  /** How a note starts and ends, in seconds (the "Shape the sound" controls). */
+  setFeel(attack: number, release: number): void;
   play(notes: string[], duration: number, time: number, velocity?: number): void;
   releaseAll(): void;
   dispose(): void;
@@ -129,11 +132,11 @@ export interface KeysVoice {
  * through the full chain and matching its loudness (RMS) to the synth keys and music box.
  */
 const SAMPLER_SETTINGS: Record<SampledInstrument, { attack: number; release: number; volume: number }> = {
-  piano: { attack: 0, release: 1.0, volume: -12 },
-  vibes: { attack: 0, release: 1.4, volume: -19 },
-  kalimba: { attack: 0, release: 0.9, volume: -6.5 },
-  glock: { attack: 0, release: 1.4, volume: -9.5 },
-  ocarina: { attack: 0.03, release: 0.25, volume: -17 },
+  piano: { attack: FEEL.piano.attack, release: FEEL.piano.release, volume: -12 },
+  vibes: { attack: FEEL.vibes.attack, release: FEEL.vibes.release, volume: -19 },
+  kalimba: { attack: FEEL.kalimba.attack, release: FEEL.kalimba.release, volume: -6.5 },
+  glock: { attack: FEEL.glock.attack, release: FEEL.glock.release, volume: -9.5 },
+  ocarina: { attack: FEEL.ocarina.attack, release: FEEL.ocarina.release, volume: -17 },
 };
 
 /** A recorded instrument: a few real notes, with the notes in between pitched from the nearest one. */
@@ -142,6 +145,10 @@ export function makeSampledKeys(name: SampledInstrument, notes: Record<string, A
   const sampler = new Tone.Sampler({ urls: notes, attack: s.attack, release: s.release, volume: s.volume });
   return {
     output: sampler,
+    setFeel: (attack, release) => {
+      sampler.attack = attack;
+      sampler.release = release;
+    },
     play: (n, dur, time, vel = 0.8) => {
       if (n.length) sampler.triggerAttackRelease(n, dur, time, vel);
     },
@@ -192,6 +199,7 @@ export function makeKeys(sound: Exclude<KeysSound | MelodySound, SampledInstrume
   synth.maxPolyphony = 32;
   return {
     output: synth,
+    setFeel: (attack, release) => synth.set({ envelope: { attack, release } }),
     play: (notes, dur, time, vel = 0.8) => {
       if (notes.length) synth.triggerAttackRelease(notes, dur, time, vel);
     },

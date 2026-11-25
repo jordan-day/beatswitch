@@ -13,6 +13,7 @@ import {
   type SynthKit,
 } from '../state/types';
 import { Slider } from './common';
+import { ToneButton } from './ToneButton';
 
 // "🎙" marks recorded (real) instruments; the rest are synthesized.
 export const KEYS_LABEL: Record<KeysSound, string> = {
@@ -136,7 +137,11 @@ export function MelodySoundControls() {
     <>
       <Field label={p.extraMelodies.length ? `${melodyName(p, melodyId)} sound` : 'Melody sound'}>
         <select className="select text-xs py-1" value={mel.sound} onChange={(e) => {
-            editMelody((m) => void (m.sound = e.target.value as MelodySound));
+            // a new instrument starts from its own natural sound, so shaping set for the old one is dropped
+            editMelody((m) => {
+              m.sound = e.target.value as MelodySound;
+              delete m.tone;
+            });
             void previewMelody(melodyId);
           }}>
           {MELODY_SOUNDS.map((s) => (
@@ -178,6 +183,7 @@ export function MelodySoundControls() {
       >
         {mel.mute ? '🔇' : '🔈'}
       </button>
+      <ToneButton melodyId={melodyId} instrument={MELODY_LABEL[mel.sound].replace(/^\S+\s/, '')} />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Note } from 'tonal';
 import { ensureAudio, previewNote } from '../audio/engine';
-import { degreeNote, slotNotes } from '../music/chords';
+import { degreeNote, melodyPitch, slotNotes } from '../music/chords';
 import { slotLength } from '../music/patterns';
 import { useProject, useUi, withUndo } from '../state/project';
 import { allMelodies, MAIN_MELODY, melodyColor, melodyName, melodyTrack } from '../state/tracks';
@@ -25,7 +25,7 @@ let clipboard: MelodyNote[] = [];
 
 export function MelodyRoll() {
   const p = useProject((s) => s.project);
-  const { addNote, resizeNote, removeNotes, moveNotes, pasteNotes, splitNote, clearMelody, randomizeMelody } = useProject();
+  const { addNote, resizeNote, removeNotes, moveNotes, pasteNotes, splitNote, clearMelody, randomizeMelody, copyMelodyBarToAll } = useProject();
   const { viewBar, step: playStep } = useUi();
   const bar = Math.min(viewBar, p.bars - 1);
   const offset = bar * STEPS_PER_BAR;
@@ -41,6 +41,12 @@ export function MelodyRoll() {
   const m = melodyTrack(p, id)!;
   const color = melodyColor(p, id);
   const name = melodyName(p, id);
+
+  // picked notes belong to the bar and melody they were picked in; a new bar starts clean, and paste lands at its start
+  useEffect(() => {
+    setSelection([]);
+    lastCol.current = offset;
+  }, [bar, id, p.activeSection]);
 
   // Which pitch classes belong to the chord playing at each visible column.
   const len = slotLength(p.bars, p.chords.slots.length);
@@ -61,6 +67,8 @@ export function MelodyRoll() {
 
   const rows = Array.from({ length: MELODY_ROWS }, (_, i) => MELODY_ROWS - 1 - i); // top = highest
   const noteName = (d: number) => degreeNote(p.tonic, p.mood, m.octave, d);
+  /** What a placed note really sounds like (its row's note, plus any accidental). */
+  const pitchOf = (n: { d: number; x?: -1 | 1 }) => melodyPitch(p.tonic, p.mood, m.octave, n.d, n.x ?? 0);
 
   const rowFromEvent = (e: React.PointerEvent) => {
     const r = gridRef.current!.getBoundingClientRect();
@@ -120,7 +128,7 @@ export function MelodyRoll() {
       } else if (mod && (key === 'c' || key === 'x') && chosen.length) {
         e.preventDefault();
         const first = Math.min(...chosen.map((n) => n.s));
-        clipboard = chosen.map((n) => ({ s: n.s - first, l: n.l, d: n.d }));
+        clipboard = chosen.map((n) => ({ s: n.s - first, l: n.l, d: n.d, ...(n.x ? { x: n.x } : {}) }));
         if (key === 'x') {
           removeNotes(chosen, id);
           setSelection([]);
@@ -131,7 +139,7 @@ export function MelodyRoll() {
         // paste where the pointer last was in the roll (or the start of this bar); notes past the loop's end are clipped
         const at = lastCol.current;
         const pasted = clipboard
-          .map((n) => ({ s: n.s + at, l: n.l, d: n.d }))
+          .map((n) => ({ ...n, s: n.s + at }))
           .filter((n) => n.s < total)
           .map((n) => ({ ...n, l: Math.min(n.l, total - n.s) }));
         if (!pasted.length) return;
@@ -192,7 +200,7 @@ export function MelodyRoll() {
       return;
     }
     ensureAudio();
-    previewNote(noteName(n.d), 'melody', id);
+    previewNote(pitchOf(n), 'melody', id);
     // dragging one of several picked notes moves them all; otherwise just this one
     const keys = isSel(n) && sel.length > 1 ? sel : [{ s: n.s, d: n.d }];
     setSelection(keys);
@@ -270,6 +278,16 @@ export function MelodyRoll() {
       <EditorHeader>
         <MelodySoundControls />
         {m.mute && <span className="text-xs font-bold text-kick">🔇 {name} is muted</span>}
+        {p.bars > 1 && (
+          <button
+            className="btn text-xs"
+            onClick={() => withUndo(`Copied bar ${bar + 1} of ${name.toLowerCase()} into every bar`, () => copyMelodyBarToAll(bar, id))}
+            disabled={!m.notes.some((n) => n.s < offset + STEPS_PER_BAR && n.s + n.l > offset)}
+            title="Copy this bar's notes into every other bar (replaces what is there)"
+          >
+            ⧉ Copy bar to all
+          </button>
+        )}
         <button
           className="btn text-base px-2.5 py-1"
           onClick={() => withUndo(`New ${name.toLowerCase()} 🎲`, () => randomizeMelody(id))}
@@ -452,7 +470,7 @@ export function MelodyRoll() {
                   title={`${noteName(n.d)}: drag to move, drag its right edge to resize, right-click to delete. Alt+drag to pick several notes`}
                 >
                   <span className="text-xs font-extrabold text-ink-950 pl-1 truncate pointer-events-none">
-                    {n.s >= offset ? Note.pitchClass(noteName(n.d)) : ''}
+                    {n.s >= offset ? Note.pitchClass(pitchOf(n)) : ''}
                   </span>
                   {sel.length === 1 && isSel(n) && (
                     <button
