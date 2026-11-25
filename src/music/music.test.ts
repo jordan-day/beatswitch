@@ -102,6 +102,27 @@ describe('patterns', () => {
     }
   });
 
+  it('random beats really vary, and never repeat the beat they replace', () => {
+    const kicks = new Set<string>();
+    const hats = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const d = randomDrums();
+      kicks.add(d.kick.slice(0, 16).join(''));
+      hats.add(d.hat.slice(0, 16).map(Boolean).join());
+      // still lo-fi: kick on 1, snare on 2 and 4, one bar repeated
+      expect([d.kick[0], d.snare[4], d.snare[12]]).toEqual([2, 2, 2]);
+      expect(d.hat.slice(48)).toEqual(d.hat.slice(0, 16));
+    }
+    expect(kicks.size).toBeGreaterThanOrEqual(6);
+    expect(hats.size).toBeGreaterThanOrEqual(5);
+    for (let i = 0; i < 50; i++) {
+      const old = randomDrums();
+      const next = randomDrums({ kick: old.kick, hat: old.hat });
+      const same = (a: number[], b: number[]) => a.slice(0, 16).every((v, k) => !!v === !!b[k]);
+      expect(same(next.kick, old.kick) && same(next.hat, old.hat)).toBe(false);
+    }
+  });
+
   it('presets build', () => {
     for (const pr of PRESET_LIST) {
       const p = buildPreset(pr.index);

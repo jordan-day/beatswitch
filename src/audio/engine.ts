@@ -109,6 +109,17 @@ export function ensureAudio(): Promise<Graph> {
 }
 
 /**
+ * When a sound scheduled for audio time `time` is actually heard. The audio system adds its own
+ * delay after that (small on a laptop, bigger on phones, and a lot with Bluetooth headphones), and
+ * the browser tells us how much: the playhead waits for it, so the squares light up with the sound.
+ */
+export function heardAt(time: number): number {
+  const ctx = Tone.getContext().rawContext as AudioContext;
+  const delay = (Number.isFinite(ctx.outputLatency) ? ctx.outputLatency : 0) + (Number.isFinite(ctx.baseLatency) ? ctx.baseLatency : 0);
+  return time + Math.min(Math.max(0, delay), 0.5); // a sanity cap: no device needs more than half a second
+}
+
+/**
  * Start playback: in 'section' mode the section being edited loops; in 'song' mode the whole
  * arrangement plays once (with its fades) and stops at the end.
  */
@@ -143,7 +154,7 @@ export async function play() {
       lastStep = step;
       counter++;
       g.scheduleStep(step, time, p);
-      Tone.getDraw().schedule(() => showPlayhead(step, p), time);
+      Tone.getDraw().schedule(() => showPlayhead(step, p), heardAt(time));
       return;
     }
     const songStep = counter++;
@@ -155,7 +166,7 @@ export async function play() {
         Tone.getDraw().schedule(() => {
           stop();
           useUi.getState().set({ songCursor: 0 }); // played to the end: next time, start from the top
-        }, time + 1.5);
+        }, heardAt(time) + 1.5);
       }
       return;
     }
@@ -169,7 +180,7 @@ export async function play() {
       }
       const now = useProject.getState().project;
       showPlayhead(id === now.activeSection ? at.local : -1, now, { songStep });
-    }, time);
+    }, heardAt(time));
   }, '16n');
   t.position = 0;
   t.start(startAt);

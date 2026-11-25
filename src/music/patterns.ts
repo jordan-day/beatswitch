@@ -108,15 +108,45 @@ const round = (v: number) => Math.round(v * 100) / 100;
 
 const rnd = (p: number) => Math.random() < p;
 
-/** Random but musical drum patterns (kick on 1, snare on 2 & 4, swung hats...). */
-export function randomDrums(): Record<DrumRow, Step[]> {
+/** Kick patterns for one bar (the kick on beat 1 is always there): from sparse to busy. */
+const KICKS: number[][] = [[0, 10], [0, 7, 10], [0, 8, 10], [0, 6, 10, 13], [0, 3, 10], [0, 10, 11], [0, 7, 14], [0, 9, 10], [0, 2, 10, 14], [0, 11]];
+
+/** Hi-hat styles for one bar: each gives the hit (0, 1 or 2 = louder) at step i. */
+const HATS: ((i: number) => Step)[] = [
+  (i) => (i % 2 === 0 ? (i % 4 === 0 ? 2 : 1) : 0), // straight 8ths
+  (i) => (i % 4 === 0 ? 2 : 1), // busy 16ths
+  (i) => (i % 2 === 0 ? (i % 4 === 0 ? 2 : 1) : rnd(0.3) ? 1 : 0), // skippy: 8ths with stray 16ths
+  (i) => (i % 4 === 0 ? 1 : 0), // sparse quarters
+  (i) => (i % 4 === 2 ? 2 : 0), // only the "ands"
+  (i) => (i % 4 === 0 || i % 4 === 3 ? 1 : 0), // lazy shuffle
+];
+
+/**
+ * A random (but musical) one-bar drum pattern, repeated to fill all steps. Lo-fi keeps its
+ * backbeat (kick on 1, snare on 2 and 4), and around it picks one of several kick patterns and
+ * hi-hat styles, with optional ghost snares, an open hat and percussion. Pass the current drums as
+ * `avoid` to always get something that sounds different from them.
+ */
+export function randomDrums(avoid?: Partial<Record<DrumRow, Step[]>>): Record<DrumRow, Step[]> {
   const bar = (fn: (i: number) => Step): Step[] => Array.from({ length: STEPS_PER_BAR }, (_, i) => fn(i));
-  const kick = bar((i) => (i === 0 ? 2 : (i === 10 || i === 7 || i === 8) && rnd(0.45) ? 1 : i === 14 && rnd(0.2) ? 1 : 0));
-  const snare = bar((i) => (i === 4 || i === 12 ? 2 : i === 15 && rnd(0.2) ? 1 : 0));
-  const hat = bar((i) => (i % 2 === 0 ? (i % 4 === 0 ? 2 : 1) : rnd(0.25) ? 1 : 0));
-  const openhat = bar((i) => (i === 14 && rnd(0.5) ? 1 : 0));
-  const perc = bar((i) => ((i === 6 || i === 11 || i === 3) && rnd(0.3) ? 1 : 0));
-  const rows = { kick, snare, hat, openhat, perc };
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+  const same = (a?: Step[], b?: Step[]) => !!a && !!b && a.slice(0, STEPS_PER_BAR).every((v, i) => !!v === !!b[i]);
+  let rows: Record<DrumRow, Step[]>;
+  for (let tries = 0; ; tries++) {
+    const kicks = pick(KICKS);
+    const hatStyle = pick(HATS);
+    const ghosts = rnd(0.4) ? [pick([7, 9, 15]), ...(rnd(0.4) ? [pick([3, 11, 14])] : [])] : [];
+    const kick = bar((i) => (i === 0 ? 2 : kicks.includes(i) ? 1 : 0));
+    const snare = bar((i) => (i === 4 || i === 12 ? 2 : ghosts.includes(i) ? 1 : 0));
+    const openAt = rnd(0.5) ? pick([6, 14, 10]) : -1;
+    const hat = bar((i) => (i === openAt ? 0 : hatStyle(i)));
+    const openhat = bar((i) => (i === openAt ? 1 : 0));
+    const percAt = rnd(0.5) ? pick([[3, 11], [6], [7, 15], [10]]) : [];
+    const perc = bar((i) => (percAt.includes(i) ? 1 : 0));
+    rows = { kick, snare, hat, openhat, perc };
+    // something you'll hear as new: a different kick or hi-hat than the beat being replaced
+    if (!avoid || tries >= 12 || !(same(kick, avoid.kick) && same(hat, avoid.hat))) break;
+  }
   const out = {} as Record<DrumRow, Step[]>;
   for (const r of DRUM_ROWS) out[r] = Array.from({ length: MAX_STEPS }, (_, i) => rows[r][i % STEPS_PER_BAR]);
   return out;

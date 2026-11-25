@@ -207,7 +207,7 @@ export function BeatScreen({ autoFill }: { autoFill?: boolean }) {
   /** A new random (but musical) beat, as one undo step: drums, a bass that follows the kick, one repeating bar. */
   function surpriseBeat() {
     useProject.getState().update((d) => {
-      const r = randomDrums();
+      const r = randomDrums({ kick: d.drums.kick.steps, hat: d.drums.hat.steps }); // always audibly different
       for (const row of Object.keys(r) as DrumRow[]) d.drums[row].steps = r[row];
       d.bass.steps = r.kick.map((s) => (s ? 1 : 0));
       oneBarBeat(d);
@@ -595,7 +595,10 @@ export function MelodyScreen({ autoFill }: { autoFill?: boolean }) {
 export function SongScreen() {
   const p = useProject((s) => s.project);
   const { setFade, update } = useProject();
-  const { playing, playMode, songStep } = useUi();
+  const playing = useUi((s) => s.playing);
+  const playMode = useUi((s) => s.playMode);
+  // which part of the song is playing (re-draws when that changes, not on every step)
+  const songStep = useUi((s) => s.songStep);
   const shaped = hasMobileShape(p);
   const seconds = songSteps(p) * stepSeconds(p.bpm);
   const timeline = buildTimeline(p);

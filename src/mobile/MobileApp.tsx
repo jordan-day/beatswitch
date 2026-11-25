@@ -185,7 +185,10 @@ export function MobileApp() {
 /** The big play button, and what it plays: the loop, or (on the Song screen) the whole song. */
 function PlayBar({ song }: { song: boolean }) {
   const p = useProject((s) => s.project);
-  const { playing, songStep, playMode } = useUi();
+  // only what it shows: in the loop it doesn't re-draw on every step (it only shows the time in a song)
+  const playing = useUi((s) => s.playing);
+  const playMode = useUi((s) => s.playMode);
+  const songStep = useUi((s) => (s.playMode === 'song' ? s.songStep : -1));
   const total = songSteps(p) * stepSeconds(p.bpm);
   const at = playing && playMode === 'song' && songStep >= 0 ? songStep * stepSeconds(p.bpm) : 0;
   return (

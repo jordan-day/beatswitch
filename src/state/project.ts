@@ -251,7 +251,7 @@ export const useProject = create<ProjectStore>((set, get) => ({
 
   randomize: () =>
     get().update((p) => {
-      const r = randomDrums();
+      const r = randomDrums({ kick: p.drums.kick.steps, hat: p.drums.hat.steps }); // always audibly different
       for (const row of Object.keys(r) as DrumRow[]) p.drums[row].steps = r[row];
       // bass follows the kick, mostly roots with the odd fifth
       p.bass.steps = r.kick.map((s, i) => (s ? (i % 16 >= 8 && Math.random() < 0.4 ? 2 : 1) : 0));
